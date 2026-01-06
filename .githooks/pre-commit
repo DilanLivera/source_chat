@@ -1,0 +1,5 @@
+#!/bin/sh
+# Pre-commit hook - can be used for linting or running tests
+# For now, it just passes.
+exit 0
+
