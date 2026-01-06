@@ -8,4 +8,37 @@
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     </PropertyGroup>
 
+    <ItemGroup>
+        <!-- Utilities -->
+        <PackageReference Include="DotNetEnv" Version="3.1.1"/>
+
+        <!-- AI Integration -->
+        <PackageReference Include="Microsoft.Extensions.AI" Version="10.0.1-preview.1.25571.5"/>
+        <PackageReference Include="Microsoft.Extensions.AI.AzureAIInference" Version="10.0.0-preview.1.25559.3"/>
+        <PackageReference Include="Microsoft.Extensions.AI.Ollama" Version="9.7.0-preview.1.25356.2"/>
+        <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.0.1-preview.1.25571.5"/>
+
+        <!-- Configuration -->
+        <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.0"/>
+        <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.0"/>
+
+        <!-- Logging -->
+        <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.0"/>
+
+        <!-- Core Data Ingestion -->
+        <PackageReference Include="Microsoft.Extensions.DataIngestion" Version="10.0.1-preview.1.25571.5"/>
+        <PackageReference Include="Microsoft.Extensions.DataIngestion.Abstractions" Version="10.0.1-preview.1.25571.5"/>
+
+        <!-- Tokenization -->
+        <PackageReference Include="Microsoft.ML.Tokenizers" Version="2.0.0"/>
+        <PackageReference Include="Microsoft.ML.Tokenizers.Data.Cl100kBase" Version="2.0.0"/>
+
+        <!-- Vector Store -->
+        <PackageReference Include="Microsoft.SemanticKernel.Connectors.SqliteVec" Version="1.67.1-preview"/>
+
+        <!-- Command Line -->
+        <PackageReference Include="System.CommandLine" Version="2.0.0-beta4.22272.1"/>
+    </ItemGroup>
+
 </Project>
