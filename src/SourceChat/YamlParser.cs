@@ -23,7 +23,7 @@ internal class YamlParser : IFileParser
                                     .Select(l => l.Split(':')[0].Trim())
                                     .ToList();
 
-        if (topLevelKeys.Any())
+        if (topLevelKeys.Count != 0)
         {
             metadata["top_level_keys"] = string.Join(", ", topLevelKeys.Take(10));
             metadata["key_count"] = topLevelKeys.Count.ToString();

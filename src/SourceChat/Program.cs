@@ -23,8 +23,7 @@ try
     rootCommand.Subcommands.Add(ClearCommand.Create(loggerFactory));
     rootCommand.Subcommands.Add(ConfigCommand.Create(loggerFactory));
 
-    return await rootCommand.Parse(args).
-                             InvokeAsync();
+    return await rootCommand.Parse(args).InvokeAsync();
 }
 catch (Exception ex)
 {

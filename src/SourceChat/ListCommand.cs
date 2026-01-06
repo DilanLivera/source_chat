@@ -18,53 +18,55 @@ internal static class ListCommand
         command.Add(statsOption);
 
         command.SetAction(result =>
-                           {
-                               ILogger logger = loggerFactory.CreateLogger(categoryName: "ListCommand");
-                               ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
+        {
+            ILogger logger = loggerFactory.CreateLogger(categoryName: "ListCommand");
+            ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
 
-                               bool showStats = result.GetRequiredValue(statsOption);
+            bool showStats = result.GetRequiredValue(statsOption);
 
-                               try
-                               {
-                                   FileChangeDetector changeDetector = new(config.SqliteDbPath);
-                                   List<string> trackedFiles = changeDetector.GetTrackedFiles();
+            try
+            {
+                FileChangeDetector changeDetector = new(config.SqliteDbPath);
+                List<string> trackedFiles = changeDetector.GetTrackedFiles();
 
-                                   if (!trackedFiles.Any())
-                                   {
-                                       Console.WriteLine("No files have been ingested yet.");
+                if (trackedFiles.Count == 0)
+                {
+                    Console.WriteLine("No files have been ingested yet.");
 
-                                       return;
-                                   }
+                    return;
+                }
 
-                                   Console.WriteLine($"Tracked Files ({trackedFiles.Count}):");
-                                   Console.WriteLine();
+                Console.WriteLine($"Tracked Files ({trackedFiles.Count}):");
+                Console.WriteLine();
 
-                                   foreach (string file in trackedFiles.OrderBy(f => f))
-                                   {
-                                       Console.WriteLine($"  {file}");
-                                   }
+                foreach (string file in trackedFiles.OrderBy(f => f))
+                {
+                    Console.WriteLine($"  {file}");
+                }
 
-                                   if (showStats)
-                                   {
-                                       Console.WriteLine();
-                                       Console.WriteLine("Database Statistics:");
+                if (!showStats)
+                {
+                    return;
+                }
 
-                                       FileInfo dbFile = new(config.SqliteDbPath);
-                                       if (dbFile.Exists)
-                                       {
-                                           Console.WriteLine($"  Database size: {dbFile.Length / 1024.0:F2} KB");
-                                           Console.WriteLine($"  Last modified: {dbFile.LastWriteTime}");
-                                       }
+                Console.WriteLine();
+                Console.WriteLine("Database Statistics:");
 
-                                       // TODO: Add vector store statistics (chunk count, etc.)
-                                   }
-                               }
-                               catch (Exception ex)
-                               {
-                                   Console.WriteLine($"Error: {ex.Message}");
-                                   logger.LogError(ex, "List command failed");
-                               }
-                           });
+                FileInfo dbFile = new(config.SqliteDbPath);
+                if (dbFile.Exists)
+                {
+                    Console.WriteLine($"  Database size: {dbFile.Length / 1024.0:F2} KB");
+                    Console.WriteLine($"  Last modified: {dbFile.LastWriteTime}");
+                }
+
+                // TODO: Add vector store statistics (chunk count, etc.)
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex.Message}");
+                logger.LogError(ex, "List command failed");
+            }
+        });
 
         return command;
     }

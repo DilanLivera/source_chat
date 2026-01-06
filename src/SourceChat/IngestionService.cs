@@ -128,17 +128,12 @@ internal class IngestionService
         metadata["file_size"] = fileInfo.Length.ToString();
         metadata["last_modified"] = fileInfo.LastWriteTimeUtc.ToString("O");
 
-        IngestionDocumentSection ingestionDocumentSection = new(content)
+        IngestionDocumentSection section = new(content)
         {
             // Metadata = metadata // TODO: how can we set metadata
         };
-        IngestionDocument document = new(identifier: filePath)
-        {
-            Sections =
-                                         {
-                                             ingestionDocumentSection
-                                         }
-        };
+        IngestionDocument document = new(identifier: filePath);
+        document.Sections.Add(section);
 
         IngestionChunker<string> chunker = CreateChunker(strategy);
 

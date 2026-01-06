@@ -21,7 +21,7 @@ internal partial class MarkdownParser : IFileParser
                                .Select(m => m.Groups[1].Value.Trim())
                                .ToList();
 
-        if (headers.Any())
+        if (headers.Count != 0)
         {
             metadata["headers"] = string.Join(" > ", headers.Take(5)); // First 5 headers
             metadata["header_count"] = headers.Count.ToString();

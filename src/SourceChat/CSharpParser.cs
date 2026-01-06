@@ -34,7 +34,7 @@ internal partial class CSharpParser : IFileParser
         // Extract classes
         MatchCollection classMatches = ClassRegex().Matches(content);
         List<string> classes = classMatches.Select(m => m.Groups[1].Value).ToList();
-        if (classes.Any())
+        if (classes.Count != 0)
         {
             metadata["classes"] = string.Join(", ", classes);
         }
@@ -42,7 +42,7 @@ internal partial class CSharpParser : IFileParser
         // Extract methods
         MatchCollection methodMatches = MethodRegex().Matches(content);
         List<string> methods = methodMatches.Select(m => m.Groups[1].Value).Distinct().ToList();
-        if (methods.Any())
+        if (methods.Count != 0)
         {
             metadata["methods"] = string.Join(", ", methods.Take(10)); // Limit to first 10
             metadata["method_count"] = methods.Count.ToString();
@@ -61,7 +61,7 @@ internal partial class CSharpParser : IFileParser
             }
         }
 
-        if (summaries.Any())
+        if (summaries.Count != 0)
         {
             metadata["xml_summaries"] = string.Join(" | ", summaries);
         }

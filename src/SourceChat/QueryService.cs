@@ -40,7 +40,7 @@ internal class QueryService
             List<VectorSearchResult<object>> searchResults = await collection.SearchAsync(question, top: maxResults)
                                                                              .ToListAsync();
 
-            if (!searchResults.Any())
+            if (searchResults.Count == 0)
             {
                 return "I couldn't find any relevant information in the codebase to answer your question.";
             }
