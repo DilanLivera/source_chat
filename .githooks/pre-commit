@@ -1,5 +1,40 @@
-#!/bin/sh
-# Pre-commit hook - can be used for linting or running tests
-# For now, it just passes.
+#!/bin/bash
+
+# Pre-commit hook: Format and Build
+# This script ensures the code is formatted and builds successfully before allowing a commit.
+
+echo "--- Pre-commit hook started ---"
+
+# 1. Run dotnet format
+echo "Step 1: Running dotnet format..."
+dotnet format
+FORMAT_EXIT_CODE=$?
+
+if [ $FORMAT_EXIT_CODE -ne 0 ]; then
+    echo "Formatting encountered issues (Exit Code: $FORMAT_EXIT_CODE)."
+    # We don't necessarily want to fail here if it's just a warning,
+    # but we'll proceed to build.
+fi
+
+# 2. Re-stage any files modified by dotnet format
+# This ensures formatting changes are actually included in the commit.
+echo "Step 2: Staging formatted files..."
+git add -u
+
+# 3. Run dotnet build
+# We use Release configuration to catch more potential issues.
+echo "Step 3: Running dotnet build..."
+dotnet build --configuration Debug --no-restore
+BUILD_EXIT_CODE=$?
+
+if [ $BUILD_EXIT_CODE -ne 0 ]; then
+    echo "--------------------------------------------------"
+    echo "BUILD FAILED! Commit aborted."
+    echo "Please fix the build errors before committing."
+    echo "--------------------------------------------------"
+    exit 1
+fi
+
+echo "--- Pre-commit hook finished successfully ---"
 exit 0
 
