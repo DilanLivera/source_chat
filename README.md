@@ -8,24 +8,6 @@ Built using [System.CommandLine](https://learn.microsoft.com/en-us/dotnet/standa
 
 SourceChat follows a Vertical Slice Architecture, organizing code around distinct business features (Ingest, Query, List, Config, Clear) rather than technical layers. Each feature folder contains its specific commands and services, promoting high cohesion and easier maintainability. Technical concerns like storage, parsing, and configuration are isolated in the Infrastructure layer, while common logic is shared via the Features/Shared directory.
 
-### Project Structure
-
-```text
-src/SourceChat/
-├── Features/               # Business capabilities
-│   ├── Shared/             # Common logic and models
-│   ├── Ingest/             # Data ingestion feature
-│   ├── Query/              # RAG-based querying feature
-│   ├── List/               # File listing and stats
-│   ├── Config/             # Configuration management
-│   └── Clear/              # Data cleanup
-├── Infrastructure/         # Technical concerns
-│   ├── Configuration/      # Env/Settings handling
-│   ├── Storage/            # Vector store and file tracking
-│   └── Parsing/            # File parsers (C#, MD, JSON, etc.)
-└── Program.cs              # Application entry point
-```
-
 ## Installation & Setup
 
 ### Prerequisites
