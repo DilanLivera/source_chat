@@ -1,6 +1,5 @@
 using System.CommandLine;
 using Microsoft.Extensions.Logging;
-using SourceChat.Features.Ingest;
 using SourceChat.Features.Shared;
 using SourceChat.Infrastructure.Configuration;
 using SourceChat.Infrastructure.Storage;
@@ -11,8 +10,6 @@ internal static class IngestCommand
 {
     public static Command Create(ILoggerFactory loggerFactory)
     {
-        Command command = new(name: "ingest", description: "Ingest code and documentation files into the vector database");
-
         Argument<string> pathArgument = new(name: "path")
         {
             Description = "Path to the directory containing files to ingest"
@@ -42,6 +39,9 @@ internal static class IngestCommand
             DefaultValueFactory = result => true
         };
 
+        Command command = new(name: "ingest",
+                              description: "Ingest code and documentation files into the vector database");
+
         command.Add(pathArgument);
 
         command.Add(strategyOption);
@@ -51,7 +51,7 @@ internal static class IngestCommand
 
         command.SetAction(result =>
         {
-            ILogger logger = loggerFactory.CreateLogger(categoryName: "IngestCommand");
+            ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(IngestCommand));
             ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
 
             string path = result.GetRequiredValue(pathArgument);
@@ -77,7 +77,8 @@ internal static class IngestCommand
                 Console.WriteLine($"Incremental: {incremental}");
                 Console.WriteLine();
 
-                VectorStoreManager vectorStoreManager = new(config, loggerFactory.CreateLogger<VectorStoreManager>());
+                VectorStoreManager vectorStoreManager = new(config,
+                                                            loggerFactory.CreateLogger<VectorStoreManager>());
                 FileChangeDetector changeDetector = new(config.SqliteDbPath);
                 IngestionService ingestionService = new(config,
                                                         vectorStoreManager,

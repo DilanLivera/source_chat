@@ -4,11 +4,12 @@ namespace SourceChat.Infrastructure.Parsing;
 
 internal partial class MarkdownParser : IFileParser
 {
-    [GeneratedRegex(@"^#{1,6}\s+(.+)$", RegexOptions.Multiline | RegexOptions.Compiled)]
+    [GeneratedRegex(pattern: @"^#{1,6}\s+(.+)$",
+                    options: RegexOptions.Multiline | RegexOptions.Compiled)]
     private static partial Regex HeaderRegex();
 
-    public bool CanParse(string filePath) =>
-        Path.GetExtension(filePath).Equals(".md", StringComparison.OrdinalIgnoreCase);
+    public bool CanParse(string filePath) => Path.GetExtension(filePath)
+                                                 .Equals(".md", StringComparison.OrdinalIgnoreCase);
 
     public async Task<(string content, Dictionary<string, string> metadata)> ParseAsync(string filePath)
     {
@@ -29,14 +30,16 @@ internal partial class MarkdownParser : IFileParser
         }
 
         // Count code blocks
-        int codeBlockCount = Regex.Matches(content, @"```[\s\S]*?```").Count;
+        int codeBlockCount = Regex.Matches(input: content, pattern: @"```[\s\S]*?```")
+                                  .Count;
         if (codeBlockCount > 0)
         {
             metadata["code_blocks"] = codeBlockCount.ToString();
         }
 
         // Count links
-        int linkCount = Regex.Matches(content, @"\[([^\]]+)\]\(([^)]+)\)").Count;
+        int linkCount = Regex.Matches(input: content, pattern: @"\[([^\]]+)\]\(([^)]+)\)")
+                             .Count;
         if (linkCount > 0)
         {
             metadata["links"] = linkCount.ToString();

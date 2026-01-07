@@ -10,10 +10,7 @@ internal class ProgressReporter
     private int _totalChunks;
     private readonly bool _verbose;
 
-    public ProgressReporter(bool verbose = false)
-    {
-        _verbose = verbose;
-    }
+    public ProgressReporter(bool verbose = false) => _verbose = verbose;
 
     public void Start(int totalFiles)
     {

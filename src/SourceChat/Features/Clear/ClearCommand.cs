@@ -9,19 +9,19 @@ internal static class ClearCommand
 {
     public static Command Create(ILoggerFactory loggerFactory)
     {
-        Command command = new(name: "clear", description: "Clear all ingested data");
-
         Option<bool> confirmOption = new(name: "--confirm")
         {
             Description = "Skip confirmation prompt",
             DefaultValueFactory = result => false
         };
 
+        Command command = new(name: "clear", description: "Clear all ingested data");
+
         command.Add(confirmOption);
 
         command.SetAction(result =>
         {
-            ILogger logger = loggerFactory.CreateLogger("ClearCommand");
+            ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(ClearCommand));
             ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
 
             bool confirm = result.GetRequiredValue(confirmOption);
@@ -31,7 +31,9 @@ internal static class ClearCommand
                 if (!confirm)
                 {
                     Console.Write("Are you sure you want to clear all ingested data? (yes/no): ");
-                    string? response = Console.ReadLine()?.Trim().ToLowerInvariant();
+                    string? response = Console.ReadLine()?
+                                              .Trim()
+                                              .ToLowerInvariant();
 
                     if (response != "yes" && response != "y")
                     {

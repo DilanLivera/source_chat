@@ -1,4 +1,3 @@
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DataIngestion.Chunkers;
 using Microsoft.Extensions.Logging;
@@ -66,6 +65,7 @@ internal class IngestionService
             if (incremental)
             {
                 files = FilterChangedFiles(files, verbose);
+
                 if (files.Count == 0)
                 {
                     Console.WriteLine("No changed files detected. Ingestion skipped.");
@@ -116,7 +116,8 @@ internal class IngestionService
     private async Task<int> ProcessFileAsync(string filePath, ChunkingStrategy strategy, bool verbose)
     {
         IFileParser? parser = _parsers.FirstOrDefault(p => p.CanParse(filePath));
-        if (parser == null)
+
+        if (parser is null)
         {
             if (verbose)
             {
@@ -132,7 +133,7 @@ internal class IngestionService
         metadata["file_path"] = filePath;
         metadata["file_name"] = fileInfo.Name;
         metadata["file_size"] = fileInfo.Length.ToString();
-        metadata["last_modified"] = fileInfo.LastWriteTimeUtc.ToString("O");
+        metadata["last_modified"] = fileInfo.LastWriteTimeUtc.ToString(format: "O");
 
         IngestionDocumentSection section = new(content)
         {
@@ -187,14 +188,14 @@ internal class IngestionService
                                            .Select(p => p.Trim())
                                            .ToList();
 
-        List<string> files = [];
+        List<string> files = patternList.SelectMany(p => Directory.GetFiles(path,
+                                                                            searchPattern: p,
+                                                                            SearchOption.AllDirectories))
+                                        .Distinct()
+                                        .OrderBy(f => f)
+                                        .ToList();
 
-        foreach (string pattern in patternList)
-        {
-            files.AddRange(Directory.GetFiles(path, pattern, SearchOption.AllDirectories));
-        }
-
-        return files.Distinct().OrderBy(f => f).ToList();
+        return files;
     }
 
     private List<string> FilterChangedFiles(List<string> files, bool verbose)

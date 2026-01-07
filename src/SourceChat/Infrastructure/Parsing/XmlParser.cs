@@ -4,8 +4,8 @@ namespace SourceChat.Infrastructure.Parsing;
 
 internal class XmlParser : IFileParser
 {
-    public bool CanParse(string filePath) =>
-        Path.GetExtension(filePath).Equals(".xml", StringComparison.OrdinalIgnoreCase);
+    public bool CanParse(string filePath) => Path.GetExtension(filePath)
+                                                 .Equals(".xml", StringComparison.OrdinalIgnoreCase);
 
     public async Task<(string content, Dictionary<string, string> metadata)> ParseAsync(string filePath)
     {
@@ -20,7 +20,8 @@ internal class XmlParser : IFileParser
             {
                 metadata["root_element"] = doc.Root.Name.LocalName;
 
-                int elementCount = doc.Descendants().Count();
+                int elementCount = doc.Descendants()
+                                      .Count();
                 metadata["element_count"] = elementCount.ToString();
 
                 IEnumerable<string> uniqueElements = doc.Descendants()

@@ -6,10 +6,7 @@ internal class ConfigurationService
 {
     private readonly ILogger<ConfigurationService> _logger;
 
-    public ConfigurationService(ILogger<ConfigurationService> logger)
-    {
-        _logger = logger;
-    }
+    public ConfigurationService(ILogger<ConfigurationService> logger) => _logger = logger;
 
     public string AiProvider => GetEnvVar("AI_PROVIDER", "OpenAI");
     public string SqliteDbPath => GetEnvVar("SQLITE_DB_PATH", "./sourcechat.db");

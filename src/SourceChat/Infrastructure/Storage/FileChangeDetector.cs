@@ -11,7 +11,7 @@ internal class FileChangeDetector
 
     public FileChangeDetector(string dbPath)
     {
-        _trackingFilePath = Path.ChangeExtension(dbPath, ".tracking.json");
+        _trackingFilePath = Path.ChangeExtension(dbPath, extension: ".tracking.json");
         _fileTracking = LoadTracking();
     }
 
@@ -29,7 +29,7 @@ internal class FileChangeDetector
 
     public async Task<string> GetFileHashAsync(string filePath)
     {
-        using FileStream stream = File.OpenRead(filePath);
+        await using FileStream stream = File.OpenRead(filePath);
         byte[] hash = await SHA256.HashDataAsync(stream);
 
         return Convert.ToHexString(hash);
@@ -64,7 +64,7 @@ internal class FileChangeDetector
                                                {
                                                    WriteIndented = true
                                                });
-        File.WriteAllText(_trackingFilePath, json);
+        File.WriteAllText(_trackingFilePath, contents: json);
     }
 
     private Dictionary<string, FileTrackingInfo> LoadTracking()
@@ -89,6 +89,7 @@ internal class FileChangeDetector
     public void ClearTracking()
     {
         _fileTracking.Clear();
+
         if (File.Exists(_trackingFilePath))
         {
             File.Delete(_trackingFilePath);

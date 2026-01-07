@@ -4,20 +4,24 @@ namespace SourceChat.Infrastructure.Parsing;
 
 internal partial class CSharpParser : IFileParser
 {
-    [GeneratedRegex(@"namespace\s+([\w\.]+)", RegexOptions.Compiled)]
+    [GeneratedRegex(pattern: @"namespace\s+([\w\.]+)",
+                    options: RegexOptions.Compiled)]
     private static partial Regex NamespaceRegex();
 
-    [GeneratedRegex(@"(?:public|private|protected|internal|static)?\s*(?:partial\s+)?(?:class|interface|struct|enum)\s+(\w+)", RegexOptions.Compiled)]
+    [GeneratedRegex(pattern: @"(?:public|private|protected|internal|static)?\s*(?:partial\s+)?(?:class|interface|struct|enum)\s+(\w+)",
+                    options: RegexOptions.Compiled)]
     private static partial Regex ClassRegex();
 
-    [GeneratedRegex(@"(?:public|private|protected|internal|static|virtual|override|async)?\s+[\w<>\[\]]+\s+(\w+)\s*\([^)]*\)", RegexOptions.Compiled)]
+    [GeneratedRegex(pattern: @"(?:public|private|protected|internal|static|virtual|override|async)?\s+[\w<>\[\]]+\s+(\w+)\s*\([^)]*\)",
+                    options: RegexOptions.Compiled)]
     private static partial Regex MethodRegex();
 
-    [GeneratedRegex(@"///\s*<summary>(.*?)<\/summary>", RegexOptions.Singleline | RegexOptions.Compiled)]
+    [GeneratedRegex(pattern: @"///\s*<summary>(.*?)<\/summary>",
+                    options: RegexOptions.Singleline | RegexOptions.Compiled)]
     private static partial Regex XmlSummaryRegex();
 
-    public bool CanParse(string filePath) =>
-        Path.GetExtension(filePath).Equals(".cs", StringComparison.OrdinalIgnoreCase);
+    public bool CanParse(string filePath) => Path.GetExtension(filePath)
+                                                .Equals(".cs", StringComparison.OrdinalIgnoreCase);
 
     public async Task<(string content, Dictionary<string, string> metadata)> ParseAsync(string filePath)
     {
@@ -33,7 +37,8 @@ internal partial class CSharpParser : IFileParser
 
         // Extract classes
         MatchCollection classMatches = ClassRegex().Matches(content);
-        List<string> classes = classMatches.Select(m => m.Groups[1].Value).ToList();
+        List<string> classes = classMatches.Select(m => m.Groups[1].Value)
+                                           .ToList();
         if (classes.Count != 0)
         {
             metadata["classes"] = string.Join(", ", classes);
@@ -41,7 +46,9 @@ internal partial class CSharpParser : IFileParser
 
         // Extract methods
         MatchCollection methodMatches = MethodRegex().Matches(content);
-        List<string> methods = methodMatches.Select(m => m.Groups[1].Value).Distinct().ToList();
+        List<string> methods = methodMatches.Select(m => m.Groups[1].Value)
+                                            .Distinct()
+                                            .ToList();
         if (methods.Count != 0)
         {
             metadata["methods"] = string.Join(", ", methods.Take(10)); // Limit to first 10
@@ -54,7 +61,7 @@ internal partial class CSharpParser : IFileParser
         foreach (Match match in summaryMatches)
         {
             string summary = match.Groups[1].Value.Trim();
-            summary = Regex.Replace(summary, @"\s+", " "); // Normalize whitespace
+            summary = Regex.Replace(input: summary, pattern: @"\s+", replacement: " "); // Normalize whitespace
             if (!string.IsNullOrWhiteSpace(summary))
             {
                 summaries.Add(summary);

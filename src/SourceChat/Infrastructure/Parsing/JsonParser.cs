@@ -4,8 +4,8 @@ namespace SourceChat.Infrastructure.Parsing;
 
 internal class JsonParser : IFileParser
 {
-    public bool CanParse(string filePath) =>
-        Path.GetExtension(filePath).Equals(".json", StringComparison.OrdinalIgnoreCase);
+    public bool CanParse(string filePath) => Path.GetExtension(filePath)
+                                                 .Equals(".json", StringComparison.OrdinalIgnoreCase);
 
     public async Task<(string content, Dictionary<string, string> metadata)> ParseAsync(string filePath)
     {
@@ -28,22 +28,25 @@ internal class JsonParser : IFileParser
 
             if (root.ValueKind == JsonValueKind.Object)
             {
-                int propertyCount = root.EnumerateObject().Count();
+                int propertyCount = root.EnumerateObject()
+                                        .Count();
                 metadata["property_count"] = propertyCount.ToString();
 
-                string topLevelKeys = string.Join(", ",
-                                                  root.EnumerateObject().Select(p => p.Name).Take(10));
-                metadata["top_level_keys"] = topLevelKeys;
+                IEnumerable<string> topLevelKeys = root.EnumerateObject()
+                                                       .Select(p => p.Name)
+                                                       .Take(10);
+                metadata["top_level_keys"] = string.Join(", ", topLevelKeys);
             }
             else if (root.ValueKind == JsonValueKind.Array)
             {
-                metadata["array_length"] = root.GetArrayLength().ToString();
+                metadata["array_length"] = root.GetArrayLength()
+                                               .ToString();
             }
 
             metadata["file_type"] = "json";
             metadata["language"] = "JSON";
 
-            return (prettyJson, metadata);
+            return (content: prettyJson, metadata);
         }
         catch (JsonException ex)
         {

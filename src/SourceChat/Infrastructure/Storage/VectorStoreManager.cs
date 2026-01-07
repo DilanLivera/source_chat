@@ -45,7 +45,7 @@ internal class VectorStoreManager : IDisposable
 
     public IEmbeddingGenerator<string, Embedding<float>> GetEmbeddingGenerator()
     {
-        if (_embeddingGenerator != null)
+        if (_embeddingGenerator is not null)
         {
             return _embeddingGenerator;
         }
@@ -69,7 +69,8 @@ internal class VectorStoreManager : IDisposable
     {
         OpenAIClient client = new(_config.OpenAiApiKey);
 
-        return client.GetEmbeddingClient(_config.OpenAiEmbeddingModel).AsIEmbeddingGenerator();
+        return client.GetEmbeddingClient(_config.OpenAiEmbeddingModel)
+                     .AsIEmbeddingGenerator();
     }
 
     private IEmbeddingGenerator<string, Embedding<float>> CreateAzureOpenAIEmbeddingGenerator()

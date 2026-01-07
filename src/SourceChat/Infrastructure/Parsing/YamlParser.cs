@@ -17,11 +17,10 @@ internal class YamlParser : IFileParser
 
         // Count top-level keys (simple heuristic)
         string[] lines = content.Split('\n');
-        List<string> topLevelKeys = lines
-                                    .Where(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith('#'))
-                                    .Where(l => l.Contains(':') && !l.StartsWith(' ') && !l.StartsWith('\t'))
-                                    .Select(l => l.Split(':')[0].Trim())
-                                    .ToList();
+        List<string> topLevelKeys = lines.Where(l => !string.IsNullOrWhiteSpace(l) && !l.TrimStart().StartsWith('#'))
+                                          .Where(l => l.Contains(':') && !l.StartsWith(' ') && !l.StartsWith('\t'))
+                                          .Select(l => l.Split(':')[0].Trim())
+                                          .ToList();
 
         if (topLevelKeys.Count != 0)
         {

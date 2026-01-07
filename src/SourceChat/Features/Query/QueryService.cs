@@ -35,7 +35,6 @@ internal class QueryService
     {
         try
         {
-            // Search vector store
             SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
             SqliteCollection<object, object> collection = vectorStore.GetCollection<object, object>(name: "default");
 
@@ -56,14 +55,12 @@ internal class QueryService
             string contextText = string.Join("\n\n", retrievedChunks);
             string systemPrompt = BuildSystemPrompt(contextText);
 
-            // Get chat client
             IChatClient chatClient = GetChatClient();
 
-            // Build messages
             List<ChatMessage> messages = [new(ChatRole.System, systemPrompt)];
 
             // Add conversation history if available
-            if (context != null)
+            if (context is not null)
             {
                 messages.AddRange(context.History);
                 context.AddRetrievedChunks(retrievedChunks);

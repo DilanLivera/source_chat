@@ -8,19 +8,19 @@ internal static class ConfigCommand
 {
     public static Command Create(ILoggerFactory loggerFactory)
     {
-        Command command = new(name: "config", description: "Show current configuration");
-
         Option<bool> showOption = new(name: "--show")
         {
             Description = "Display configuration",
             DefaultValueFactory = result => true
         };
 
+        Command command = new(name: "config", description: "Show current configuration");
+
         command.Add(showOption);
 
         command.SetAction(result =>
         {
-            ILogger logger = loggerFactory.CreateLogger("ConfigCommand");
+            ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(ConfigCommand));
             ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
 
             try

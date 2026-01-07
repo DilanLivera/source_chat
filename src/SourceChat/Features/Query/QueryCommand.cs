@@ -9,8 +9,6 @@ internal static class QueryCommand
 {
     public static Command Create(ILoggerFactory loggerFactory)
     {
-        Command command = new(name: "query", description: "Query the ingested codebase");
-
         Argument<string?> questionArgument = new(name: "question")
         {
             Description = "Question to ask (if not provided, enters interactive mode)",
@@ -29,13 +27,15 @@ internal static class QueryCommand
             DefaultValueFactory = result => false
         };
 
+        Command command = new(name: "query", description: "Query the ingested codebase");
+
         command.Add(questionArgument);
         command.Add(maxResultsOption);
         command.Add(interactiveOption);
 
         command.SetAction(result =>
         {
-            ILogger logger = loggerFactory.CreateLogger(categoryName: "QueryCommand");
+            ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(QueryCommand));
             ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
 
             string? question = result.GetRequiredValue(questionArgument);

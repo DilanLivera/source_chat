@@ -6,10 +6,6 @@ using SourceChat.Features.Config;
 using SourceChat.Features.Ingest;
 using SourceChat.Features.List;
 using SourceChat.Features.Query;
-using SourceChat.Features.Shared;
-using SourceChat.Infrastructure.Configuration;
-using SourceChat.Infrastructure.Parsing;
-using SourceChat.Infrastructure.Storage;
 
 Env.Load();
 
@@ -31,7 +27,8 @@ try
     rootCommand.Subcommands.Add(ClearCommand.Create(loggerFactory));
     rootCommand.Subcommands.Add(ConfigCommand.Create(loggerFactory));
 
-    return await rootCommand.Parse(args).InvokeAsync();
+    return await rootCommand.Parse(args)
+                            .InvokeAsync();
 }
 catch (Exception ex)
 {

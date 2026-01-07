@@ -9,19 +9,19 @@ internal static class ListCommand
 {
     public static Command Create(ILoggerFactory loggerFactory)
     {
-        Command command = new(name: "list", description: "List ingested files and statistics");
-
         Option<bool> statsOption = new(name: "--stats")
         {
             Description = "Show detailed statistics",
             DefaultValueFactory = result => false
         };
 
+        Command command = new(name: "list", description: "List ingested files and statistics");
+
         command.Add(statsOption);
 
         command.SetAction(result =>
         {
-            ILogger logger = loggerFactory.CreateLogger(categoryName: "ListCommand");
+            ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(ListCommand));
             ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
 
             bool showStats = result.GetRequiredValue(statsOption);
