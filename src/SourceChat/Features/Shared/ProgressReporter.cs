@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace SourceChat;
+namespace SourceChat.Features.Shared;
 
 internal class ProgressReporter
 {
