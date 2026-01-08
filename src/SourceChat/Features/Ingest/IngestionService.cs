@@ -45,10 +45,9 @@ internal class IngestionService
     public async Task<IngestionResult> IngestDirectoryAsync(string path,
                                                             string patterns,
                                                             ChunkingStrategy strategy,
-                                                            bool verbose,
                                                             bool incremental)
     {
-        ProgressReporter progress = new(verbose);
+        ProgressReporter progress = new();
         IngestionResult result = new();
 
         try
@@ -81,9 +80,9 @@ internal class IngestionService
                     {
                         changedFiles.Add(file);
                     }
-                    else if (verbose)
+                    else
                     {
-                        Console.WriteLine($"Skipping unchanged file: {Path.GetFileName(file)}");
+                        _logger.LogDebug("Skipping unchanged file: {FileName}", Path.GetFileName(file));
                     }
                 }
 
@@ -96,10 +95,7 @@ internal class IngestionService
                                                   .ToArray();
                 foreach (string file in staleFiles)
                 {
-                    if (verbose)
-                    {
-                        Console.WriteLine($"Removing deleted file from index: {file}");
-                    }
+                    _logger.LogInformation("Removing deleted file from index: {File}", file);
                     _changeDetector.RemoveFileTracking(file);
                     // TODO: Remove chunks from vector store
                 }
@@ -124,13 +120,12 @@ internal class IngestionService
 
                     if (parser is null)
                     {
-                        if (verbose)
-                        {
-                            Console.WriteLine($"  No parser found for {Path.GetFileName(filePath)}, skipping.");
-                        }
+                        _logger.LogWarning("No parser found for {FileName}, skipping.", Path.GetFileName(filePath));
                     }
                     else
                     {
+                        _logger.LogInformation("Processing {FileName}...", Path.GetFileName(filePath));
+
                         (string content, Dictionary<string, string> metadata) = await parser.ParseAsync(filePath);
 
                         FileInfo fileInfo = new(filePath);

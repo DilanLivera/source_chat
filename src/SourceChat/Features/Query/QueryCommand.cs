@@ -7,7 +7,7 @@ namespace SourceChat.Features.Query;
 
 internal static class QueryCommand
 {
-    public static Command Create(ILoggerFactory loggerFactory)
+    public static Command Create(Option<LogLevel> logLevelOption)
     {
         Argument<string?> questionArgument = new(name: "question")
         {
@@ -32,9 +32,17 @@ internal static class QueryCommand
         command.Add(questionArgument);
         command.Add(maxResultsOption);
         command.Add(interactiveOption);
+        command.Add(logLevelOption);
 
         command.SetAction(result =>
         {
+            LogLevel logLevel = result.GetValue(logLevelOption);
+            using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.AddConsole();
+                builder.SetMinimumLevel(logLevel);
+            });
+
             ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(QueryCommand));
             ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
 

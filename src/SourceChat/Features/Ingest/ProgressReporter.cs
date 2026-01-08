@@ -8,9 +8,6 @@ internal class ProgressReporter
     private int _totalFiles;
     private int _processedFiles;
     private int _totalChunks;
-    private readonly bool _verbose;
-
-    public ProgressReporter(bool verbose = false) => _verbose = verbose;
 
     public void Start(int totalFiles)
     {
@@ -27,40 +24,27 @@ internal class ProgressReporter
         _processedFiles++;
         _totalChunks += chunksCreated;
 
-        int percentage = (_processedFiles * 100) / _totalFiles;
+        int percentage = _totalFiles > 0 ? (_processedFiles * 100) / _totalFiles : 100;
         TimeSpan elapsed = _stopwatch.Elapsed;
-        double avgTimePerFile = elapsed.TotalSeconds / _processedFiles;
+        double avgTimePerFile = _processedFiles > 0 ? elapsed.TotalSeconds / _processedFiles : 0;
         TimeSpan estimatedRemaining = TimeSpan.FromSeconds(avgTimePerFile * (_totalFiles - _processedFiles));
 
-        if (_verbose)
-        {
-            Console.WriteLine($"[{_processedFiles}/{_totalFiles}] {fileName}");
-            Console.WriteLine($"  Chunks created: {chunksCreated}");
-            Console.WriteLine($"  Progress: {percentage}% | Elapsed: {elapsed:mm\\:ss} | ETA: {estimatedRemaining:mm\\:ss}");
-        }
-        else
-        {
-            Console.Write($"\rProgress: [{new string('█', percentage / 2)}{new string('░', 50 - percentage / 2)}] {percentage}% ({_processedFiles}/{_totalFiles}) | ETA: {estimatedRemaining:mm\\:ss}");
-        }
+        Console.Write($"\rProgress: [{new string('█', percentage / 2)}{new string('░', 50 - percentage / 2)}] {percentage}% ({_processedFiles}/{_totalFiles}) | ETA: {estimatedRemaining:mm\\:ss}");
     }
 
     public void Complete()
     {
         _stopwatch.Stop();
-        Console.WriteLine(_verbose ? "" : "\n");
+        Console.WriteLine("\n");
         Console.WriteLine($"✓ Ingestion complete!");
         Console.WriteLine($"  Files processed: {_processedFiles}");
         Console.WriteLine($"  Total chunks created: {_totalChunks}");
         Console.WriteLine($"  Total time: {_stopwatch.Elapsed:mm\\:ss}");
-        Console.WriteLine($"  Average: {_stopwatch.Elapsed.TotalSeconds / _processedFiles:F2}s per file");
+        Console.WriteLine($"  Average: {(_processedFiles > 0 ? _stopwatch.Elapsed.TotalSeconds / _processedFiles : 0):F2}s per file");
     }
 
     public void ReportError(string fileName, Exception ex)
     {
         Console.WriteLine($"\n✗ Error processing {fileName}: {ex.Message}");
-        if (_verbose)
-        {
-            Console.WriteLine($"  {ex.StackTrace}");
-        }
     }
 }

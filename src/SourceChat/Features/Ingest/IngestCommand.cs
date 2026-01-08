@@ -8,7 +8,7 @@ namespace SourceChat.Features.Ingest;
 
 internal static class IngestCommand
 {
-    public static Command Create(ILoggerFactory loggerFactory)
+    public static Command Create(Option<LogLevel> logLevelOption)
     {
         Argument<string> pathArgument = new(name: "path")
         {
@@ -27,12 +27,6 @@ internal static class IngestCommand
             DefaultValueFactory = result => "*.cs;*.md;*.txt;*.json;*.yml;*.yaml;*.xml"
         };
 
-        Option<bool> verboseOption = new(name: "--verbose")
-        {
-            Description = "Enable verbose output",
-            DefaultValueFactory = result => false
-        };
-
         Option<bool> incrementalOption = new(name: "--incremental")
         {
             Description = "Only process changed files",
@@ -46,18 +40,24 @@ internal static class IngestCommand
 
         command.Add(strategyOption);
         command.Add(patternsOption);
-        command.Add(verboseOption);
         command.Add(incrementalOption);
+        command.Add(logLevelOption);
 
         command.SetAction(result =>
         {
+            LogLevel logLevel = result.GetValue(logLevelOption);
+            using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.AddConsole();
+                builder.SetMinimumLevel(logLevel);
+            });
+
             ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(IngestCommand));
             ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
 
             string path = result.GetRequiredValue(pathArgument);
             ChunkingStrategy strategy = result.GetRequiredValue(strategyOption);
             string patterns = result.GetRequiredValue(patternsOption);
-            bool verbose = result.GetRequiredValue(verboseOption);
             bool incremental = result.GetRequiredValue(incrementalOption);
 
             try
@@ -88,7 +88,6 @@ internal static class IngestCommand
                 IngestionResult ingestionResult = ingestionService.IngestDirectoryAsync(path,
                                                                                         patterns,
                                                                                         strategy,
-                                                                                        verbose,
                                                                                         incremental)
                                                                   .GetAwaiter()
                                                                   .GetResult();

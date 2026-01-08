@@ -9,29 +9,34 @@ using SourceChat.Features.Query;
 
 Env.Load();
 
-using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+Option<LogLevel> logLevelOption = new(name: "--log-level")
 {
-    builder.AddConsole();
-    builder.SetMinimumLevel(LogLevel.Information);
-});
+    Description = "Set the logging level",
+    DefaultValueFactory = _ => LogLevel.Warning
+};
 
-ILogger<Program> logger = loggerFactory.CreateLogger<Program>();
+RootCommand rootCommand = new(description: "SourceChat - AI-Powered Code Documentation Assistant");
+rootCommand.Add(logLevelOption);
+
+rootCommand.Subcommands.Add(IngestCommand.Create(logLevelOption));
+rootCommand.Subcommands.Add(QueryCommand.Create(logLevelOption));
+rootCommand.Subcommands.Add(ListCommand.Create(logLevelOption));
+rootCommand.Subcommands.Add(ClearCommand.Create(logLevelOption));
+rootCommand.Subcommands.Add(ConfigCommand.Create(logLevelOption));
 
 try
 {
-    RootCommand rootCommand = new(description: "SourceChat - AI-Powered Code Documentation Assistant");
-
-    rootCommand.Subcommands.Add(IngestCommand.Create(loggerFactory));
-    rootCommand.Subcommands.Add(QueryCommand.Create(loggerFactory));
-    rootCommand.Subcommands.Add(ListCommand.Create(loggerFactory));
-    rootCommand.Subcommands.Add(ClearCommand.Create(loggerFactory));
-    rootCommand.Subcommands.Add(ConfigCommand.Create(loggerFactory));
-
     return await rootCommand.Parse(args)
                             .InvokeAsync();
 }
 catch (Exception ex)
 {
+    using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+    {
+        builder.AddConsole();
+        builder.SetMinimumLevel(LogLevel.Error);
+    });
+    ILogger<Program> logger = loggerFactory.CreateLogger<Program>();
     logger.LogError(ex, "Fatal error occurred");
 
     return 1;

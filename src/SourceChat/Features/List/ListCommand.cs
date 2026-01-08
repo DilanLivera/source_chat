@@ -7,7 +7,7 @@ namespace SourceChat.Features.List;
 
 internal static class ListCommand
 {
-    public static Command Create(ILoggerFactory loggerFactory)
+    public static Command Create(Option<LogLevel> logLevelOption)
     {
         Option<bool> statsOption = new(name: "--stats")
         {
@@ -18,9 +18,17 @@ internal static class ListCommand
         Command command = new(name: "list", description: "List ingested files and statistics");
 
         command.Add(statsOption);
+        command.Add(logLevelOption);
 
         command.SetAction(result =>
         {
+            LogLevel logLevel = result.GetValue(logLevelOption);
+            using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.AddConsole();
+                builder.SetMinimumLevel(logLevel);
+            });
+
             ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(ListCommand));
             ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
 

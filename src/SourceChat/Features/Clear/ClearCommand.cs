@@ -7,7 +7,7 @@ namespace SourceChat.Features.Clear;
 
 internal static class ClearCommand
 {
-    public static Command Create(ILoggerFactory loggerFactory)
+    public static Command Create(Option<LogLevel> logLevelOption)
     {
         Option<bool> confirmOption = new(name: "--confirm")
         {
@@ -18,9 +18,17 @@ internal static class ClearCommand
         Command command = new(name: "clear", description: "Clear all ingested data");
 
         command.Add(confirmOption);
+        command.Add(logLevelOption);
 
         command.SetAction(result =>
         {
+            LogLevel logLevel = result.GetValue(logLevelOption);
+            using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+            {
+                builder.AddConsole();
+                builder.SetMinimumLevel(logLevel);
+            });
+
             ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(ClearCommand));
             ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
 
