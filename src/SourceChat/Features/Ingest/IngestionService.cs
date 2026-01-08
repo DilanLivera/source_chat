@@ -53,7 +53,14 @@ internal class IngestionService
 
         try
         {
-            List<string> files = GetFiles(path, patterns);
+            List<string> files = patterns.Split(';', StringSplitOptions.RemoveEmptyEntries)
+                                         .Select(p => p.Trim())
+                                         .SelectMany(p => Directory.GetFiles(path,
+                                                                             searchPattern: p,
+                                                                             SearchOption.AllDirectories))
+                                         .Distinct()
+                                         .OrderBy(f => f)
+                                         .ToList();
 
             if (files.Count == 0)
             {
@@ -64,7 +71,40 @@ internal class IngestionService
 
             if (incremental)
             {
-                files = FilterChangedFiles(files, verbose);
+                List<string> changedFiles = [];
+
+                foreach (string file in files)
+                {
+                    FileInfo fileInfo = new(file);
+
+                    if (_changeDetector.HasFileChanged(file, fileInfo.LastWriteTimeUtc))
+                    {
+                        changedFiles.Add(file);
+                    }
+                    else if (verbose)
+                    {
+                        Console.WriteLine($"Skipping unchanged file: {Path.GetFileName(file)}");
+                    }
+                }
+
+                List<string> trackedFiles = _changeDetector.GetTrackedFiles();
+
+                HashSet<string> currentFiles = files.Select(Path.GetFullPath)
+                                                    .ToHashSet();
+
+                string[] staleFiles = trackedFiles.Where(file => !currentFiles.Contains(file))
+                                                  .ToArray();
+                foreach (string file in staleFiles)
+                {
+                    if (verbose)
+                    {
+                        Console.WriteLine($"Removing deleted file from index: {file}");
+                    }
+                    _changeDetector.RemoveFileTracking(file);
+                    // TODO: Remove chunks from vector store
+                }
+
+                files = changedFiles;
 
                 if (files.Count == 0)
                 {
@@ -76,26 +116,62 @@ internal class IngestionService
 
             progress.Start(files.Count);
 
-            foreach (string file in files)
+            foreach (string filePath in files)
             {
                 try
                 {
-                    FileInfo fileInfo = new(file);
-                    int chunksCreated = await ProcessFileAsync(file, strategy, verbose);
+                    IFileParser? parser = _parsers.FirstOrDefault(p => p.CanParse(filePath));
 
-                    result.FilesProcessed++;
-                    result.TotalChunks += chunksCreated;
+                    if (parser is null)
+                    {
+                        if (verbose)
+                        {
+                            Console.WriteLine($"  No parser found for {Path.GetFileName(filePath)}, skipping.");
+                        }
+                    }
+                    else
+                    {
+                        (string content, Dictionary<string, string> metadata) = await parser.ParseAsync(filePath);
 
-                    progress.ReportFileProgress(Path.GetFileName(file), chunksCreated);
+                        FileInfo fileInfo = new(filePath);
+                        metadata["file_path"] = filePath;
+                        metadata["file_name"] = fileInfo.Name;
+                        metadata["file_size"] = fileInfo.Length.ToString();
+                        metadata["last_modified"] = fileInfo.LastWriteTimeUtc.ToString(format: "O");
 
-                    string hash = await _changeDetector.GetFileHashAsync(file);
-                    _changeDetector.UpdateFileTracking(file, fileInfo.LastWriteTimeUtc, hash);
+                        IngestionDocumentSection section = new(content)
+                        {
+                            // Metadata = metadata // TODO: how can we set metadata
+                        };
+                        IngestionDocument document = new(identifier: filePath);
+                        document.Sections.Add(section);
+
+                        IngestionChunker<string> chunker = CreateChunker(strategy);
+
+                        IAsyncEnumerable<IngestionChunk<string>> chunks = chunker.ProcessAsync(document);
+
+                        SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
+
+                        using VectorStoreWriter<string> writer = new(vectorStore, dimensionCount: 1536);
+
+                        await writer.WriteAsync(chunks);
+
+                        int chunksCreated = await chunks.CountAsync();
+
+                        result.FilesProcessed++;
+                        result.TotalChunks += chunksCreated;
+
+                        progress.ReportFileProgress(Path.GetFileName(filePath), chunksCreated);
+
+                        string hash = await _changeDetector.GetFileHashAsync(filePath);
+                        _changeDetector.UpdateFileTracking(filePath, fileInfo.LastWriteTimeUtc, hash);
+                    }
                 }
                 catch (Exception ex)
                 {
                     result.Errors++;
-                    progress.ReportError(Path.GetFileName(file), ex);
-                    _logger.LogError(ex, "Error processing file: {File}", file);
+                    progress.ReportError(Path.GetFileName(filePath), ex);
+                    _logger.LogError(ex, "Error processing file: {File}", filePath);
                 }
             }
 
@@ -111,44 +187,6 @@ internal class IngestionService
 
             throw;
         }
-    }
-
-    private async Task<int> ProcessFileAsync(string filePath, ChunkingStrategy strategy, bool verbose)
-    {
-        IFileParser? parser = _parsers.FirstOrDefault(p => p.CanParse(filePath));
-
-        if (parser is null)
-        {
-            if (verbose)
-            {
-                Console.WriteLine($"  No parser found for {Path.GetFileName(filePath)}, skipping.");
-            }
-
-            return 0;
-        }
-
-        (string content, Dictionary<string, string> metadata) = await parser.ParseAsync(filePath);
-
-        FileInfo fileInfo = new(filePath);
-        metadata["file_path"] = filePath;
-        metadata["file_name"] = fileInfo.Name;
-        metadata["file_size"] = fileInfo.Length.ToString();
-        metadata["last_modified"] = fileInfo.LastWriteTimeUtc.ToString(format: "O");
-
-        IngestionDocumentSection section = new(content)
-        {
-            // Metadata = metadata // TODO: how can we set metadata
-        };
-        IngestionDocument document = new(identifier: filePath);
-        document.Sections.Add(section);
-
-        IngestionChunker<string> chunker = CreateChunker(strategy);
-
-        IAsyncEnumerable<IngestionChunk<string>> chunks = chunker.ProcessAsync(document);
-
-        await StoreChunksAsync(document.Identifier, chunks);
-
-        return await chunks.CountAsync();
     }
 
     private IngestionChunker<string> CreateChunker(ChunkingStrategy strategy)
@@ -171,65 +209,5 @@ internal class IngestionService
 
             _ => throw new ArgumentException($"Unknown chunking strategy: {strategy}")
         };
-    }
-
-    private async Task StoreChunksAsync(string documentId, IAsyncEnumerable<IngestionChunk<string>> chunks)
-    {
-        SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
-
-        using VectorStoreWriter<string> writer = new(vectorStore, dimensionCount: 1536);
-
-        await writer.WriteAsync(chunks);
-    }
-
-    private List<string> GetFiles(string path, string patterns)
-    {
-        List<string> patternList = patterns.Split(';', StringSplitOptions.RemoveEmptyEntries)
-                                           .Select(p => p.Trim())
-                                           .ToList();
-
-        List<string> files = patternList.SelectMany(p => Directory.GetFiles(path,
-                                                                            searchPattern: p,
-                                                                            SearchOption.AllDirectories))
-                                        .Distinct()
-                                        .OrderBy(f => f)
-                                        .ToList();
-
-        return files;
-    }
-
-    private List<string> FilterChangedFiles(List<string> files, bool verbose)
-    {
-        List<string> changedFiles = [];
-
-        foreach (string file in files)
-        {
-            FileInfo fileInfo = new(file);
-
-            if (_changeDetector.HasFileChanged(file, fileInfo.LastWriteTimeUtc))
-            {
-                changedFiles.Add(file);
-            }
-            else if (verbose)
-            {
-                Console.WriteLine($"Skipping unchanged file: {Path.GetFileName(file)}");
-            }
-        }
-
-        HashSet<string> currentFiles = files.Select(Path.GetFullPath).ToHashSet();
-        List<string> trackedFiles = _changeDetector.GetTrackedFiles();
-
-        IEnumerable<string> nonCurrentTrackedFiles = trackedFiles.Where(file => !currentFiles.Contains(file));
-        foreach (string file in nonCurrentTrackedFiles)
-        {
-            if (verbose)
-            {
-                Console.WriteLine($"Removing deleted file from index: {file}");
-            }
-            _changeDetector.RemoveFileTracking(file);
-            // TODO: Remove chunks from vector store
-        }
-
-        return changedFiles;
     }
 }
