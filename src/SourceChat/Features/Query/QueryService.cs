@@ -36,10 +36,10 @@ internal class QueryService
         try
         {
             SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
-            SqliteCollection<object, object> collection = vectorStore.GetCollection<object, object>(name: "default");
+            SqliteCollection<string, VectorRecord> collection = vectorStore.GetCollection<string, VectorRecord>(name: "default");
 
-            List<VectorSearchResult<object>> searchResults = await collection.SearchAsync(question, top: maxResults)
-                                                                             .ToListAsync();
+            List<VectorSearchResult<VectorRecord>> searchResults = await collection.SearchAsync(question, top: maxResults)
+                                                                                   .ToListAsync();
 
             if (searchResults.Count == 0)
             {
@@ -48,7 +48,7 @@ internal class QueryService
 
             // Prepare context from search results
             List<string> retrievedChunks = searchResults
-                                           .Select(r => $"[Score: {r.Score:F4}] {r.Record}")
+                                           .Select(r => $"[Score: {r.Score:F4}] {r.Record.Text}")
                                            .ToList();
 
             // Build prompt with context

@@ -147,7 +147,7 @@ internal class IngestionService
 
                         SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
 
-                        using VectorStoreWriter<string> writer = new(vectorStore, dimensionCount: 1536);
+                        using VectorStoreWriter<string> writer = new(vectorStore, dimensionCount: 4096);
 
                         await writer.WriteAsync(chunks);
 
