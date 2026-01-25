@@ -38,3 +38,9 @@ public class IngestionResult
     public int TotalChunks { get; set; }
     public int Errors { get; set; }
 }
+
+public class SummaryChunk
+{
+    public double Score { get; init; }
+    public string Content { get; init; } = string.Empty;
+}

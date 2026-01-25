@@ -1,9 +1,11 @@
 using System.ClientModel;
 using System.ClientModel.Primitives;
+using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DataIngestion.Chunkers;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.VectorData;
 using Microsoft.ML.Tokenizers;
 using Microsoft.SemanticKernel.Connectors.SqliteVec;
 using OllamaSharp;
@@ -263,6 +265,78 @@ internal class IngestionService
         // TotalChunks would need additional tracking to be accurate
 
         return ingestionResult;
+    }
+
+    public async Task<List<SummaryChunk>> GetIngestionSummaryAsync(int topResults = 5)
+    {
+        List<SummaryChunk> summaryChunks = new();
+
+        try
+        {
+            SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
+
+            // Try to get the collection - it may not exist if no data was written
+            SqliteCollection<string, VectorRecord>? collection = null;
+            try
+            {
+                collection = vectorStore.GetCollection<string, VectorRecord>(name: "data");
+            }
+            catch (VectorStoreException ex) when (ex.InnerException is SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 1)
+            {
+                // Collection doesn't exist yet (SQLite error 1: no such table/column)
+                _logger.LogInformation("Collection 'data' does not exist yet. No summary available.");
+                return summaryChunks;
+            }
+            catch (VectorStoreException)
+            {
+                // Other vector store errors
+                _logger.LogInformation("Vector store collection not available.");
+                return summaryChunks;
+            }
+
+            if (collection == null)
+            {
+                return summaryChunks;
+            }
+
+            // Use a generic query to get diverse sample content from the ingested documents
+            string searchQuery = "summary overview content";
+            List<VectorSearchResult<VectorRecord>> searchResults = await collection.SearchAsync(searchQuery, top: topResults)
+                                                                                   .ToListAsync();
+
+            foreach (VectorSearchResult<VectorRecord> result in searchResults)
+            {
+                summaryChunks.Add(new SummaryChunk
+                {
+                    Score = result.Score.GetValueOrDefault(0.0),
+                    Content = result.Record.Text
+                });
+            }
+
+            _logger.LogInformation("Retrieved {Count} summary chunks from vector store", summaryChunks.Count);
+        }
+        catch (VectorStoreException ex) when (ex.InnerException is SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 1)
+        {
+            // Collection doesn't exist (SQLite error 1: no such table/column)
+            _logger.LogInformation("Collection 'data' does not exist. No summary available.");
+
+            throw;
+        }
+        catch (VectorStoreException ex)
+        {
+            // Other vector store errors
+            _logger.LogInformation("Vector store collection not available: {Message}", ex.Message);
+
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to retrieve ingestion summary: {Message}", ex.Message);
+
+            throw;
+        }
+
+        return summaryChunks;
     }
 
     private IChatClient GetChatClient(ILoggerFactory loggerFactory)

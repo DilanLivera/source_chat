@@ -95,6 +95,27 @@ internal static class IngestCommand
                     Console.WriteLine($"\n⚠ Completed with {ingestionResult.Errors} error(s)");
                     Environment.ExitCode = 1;
                 }
+
+                if (ingestionResult.FilesProcessed > 0)
+                {
+                    Console.WriteLine("\n=== Ingestion Summary ===");
+                    List<SummaryChunk> summaryChunks = await ingestionService.GetIngestionSummaryAsync(topResults: 5);
+
+                    if (summaryChunks.Count > 0)
+                    {
+                        Console.WriteLine("\nSample content from ingested documents:\n");
+                        foreach (SummaryChunk chunk in summaryChunks)
+                        {
+                            Console.WriteLine($"Score: {chunk.Score:F4}");
+                            Console.WriteLine($"\tContent: {chunk.Content}");
+                            Console.WriteLine();
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("No summary content available.");
+                    }
+                }
             }
             catch (Exception ex)
             {
