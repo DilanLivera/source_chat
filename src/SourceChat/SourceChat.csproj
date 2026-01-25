@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
         <OutputType>Exe</OutputType>
@@ -6,16 +6,21 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <AssemblyName>SourceChat</AssemblyName>
     </PropertyGroup>
 
     <ItemGroup>
         <!-- Utilities -->
+        <PackageReference Include="Azure.AI.OpenAI" Version="2.8.0-beta.1" />
         <PackageReference Include="DotNetEnv" Version="3.1.1"/>
 
         <!-- AI Integration -->
         <PackageReference Include="Microsoft.Extensions.AI" Version="10.1.1"/>
         <PackageReference Include="Microsoft.Extensions.AI.AzureAIInference" Version="10.0.0-preview.1.25559.3"/>
         <PackageReference Include="Microsoft.Extensions.AI.OpenAI" Version="10.1.1-preview.1.25612.2"/>
+        <PackageReference Include="Microsoft.Extensions.DataIngestion.Markdig" Version="10.1.0-preview.1.25608.1" />
+        <!-- fix "System.InvalidOperationException: The tokenizer data file Microsoft.ML.Tokenizers.Data.O200kBase.dll could not be loaded. Please reference the package Microsoft.ML.Tokenizers.Data.O200kBase in your project." error from Tokenizer.CreateModel method -->
+        <PackageReference Include="Microsoft.ML.Tokenizers.Data.O200kBase" Version="2.0.0" />
         <PackageReference Include="OllamaSharp" Version="5.4.12"/>
 
         <!-- Configuration -->
