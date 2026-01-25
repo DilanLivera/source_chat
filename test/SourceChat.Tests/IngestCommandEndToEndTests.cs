@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using SourceChat.Infrastructure.Storage;
 
 namespace SourceChat.Tests;
 
@@ -45,6 +46,7 @@ public class IngestCommandEndToEndTests : IDisposable
         // Using Ollama as it doesn't require API keys (assuming it's running locally)
         Environment.SetEnvironmentVariable("AI_PROVIDER", "Ollama");
         Environment.SetEnvironmentVariable("OLLAMA_ENDPOINT", "http://localhost:11434");
+        Environment.SetEnvironmentVariable("OLLAMA_EMBEDDING_MODEL", "all-minilm");
         Environment.SetEnvironmentVariable("SQLITE_DB_PATH", _testDbPath);
     }
 
@@ -52,19 +54,18 @@ public class IngestCommandEndToEndTests : IDisposable
     public async Task IngestCommand_WithValidDirectory_ShouldProcessFiles()
     {
         // Arrange: Create test files
+        // Note: Using only .md files because MarkdownReader can only process markdown files
         string testFile1 = Path.Combine(_testDirectory, "test1.md");
         string testFile2 = Path.Combine(_testDirectory, "test2.md");
-        string testFile3 = Path.Combine(_testDirectory, "test.cs");
 
         await File.WriteAllTextAsync(testFile1, "# Test Markdown File 1\n\nThis is a test markdown file.");
         await File.WriteAllTextAsync(testFile2, "# Test Markdown File 2\n\nAnother test markdown file.");
-        await File.WriteAllTextAsync(testFile3, "// Test C# file\npublic class Test { }");
 
         // Act: Run the command
         (int exitCode, string output, string error) = await RunCommandAsync("ingest",
                                                                             _testDirectory,
                                                                             "--strategy", "Section",
-                                                                            "--patterns", "*.md;*.cs",
+                                                                            "--patterns", "*.md",
                                                                             "--incremental", "false");
 
         // Assert: Check output
@@ -74,6 +75,17 @@ public class IngestCommandEndToEndTests : IDisposable
         Assert.Contains("Ingesting files from:", output);
         Assert.Contains(_testDirectory, output);
         Assert.Contains("Strategy: Section", output);
+
+        // Assert: Check database to confirm processed files are tracked
+        FileChangeDetector changeDetector = new(_testDbPath);
+        List<string> trackedFiles = changeDetector.GetTrackedFiles();
+
+        // Verify that all processed files are in the database
+        string testFile1Path = Path.GetFullPath(testFile1);
+        string testFile2Path = Path.GetFullPath(testFile2);
+
+        Assert.True(trackedFiles.Contains(testFile1Path), $"test1.md should be in the tracked files list. Tracked files: {string.Join(", ", trackedFiles)}");
+        Assert.True(trackedFiles.Contains(testFile2Path), $"test2.md should be in the tracked files list. Tracked files: {string.Join(", ", trackedFiles)}");
 
         // Log the full output for debugging
         Console.WriteLine("=== Command Output ===");
