@@ -83,7 +83,7 @@ internal class VectorStoreManager : IDisposable
                      .AsIEmbeddingGenerator();
     }
 
-    private IEmbeddingGenerator<string, Embedding<float>> CreateOllamaEmbeddingGenerator() => new OllamaApiClient(new Uri(_config.OllamaEndpoint));
+    private IEmbeddingGenerator<string, Embedding<float>> CreateOllamaEmbeddingGenerator() => new OllamaApiClient(new Uri(_config.OllamaEndpoint), _config.OllamaEmbeddingModel);
 
     public void Dispose()
     {
