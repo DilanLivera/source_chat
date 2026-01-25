@@ -26,8 +26,16 @@ rootCommand.Subcommands.Add(ConfigCommand.Create(logLevelOption));
 
 try
 {
-    return await rootCommand.Parse(args)
-                            .InvokeAsync();
+    int exitCode = await rootCommand.Parse(args)
+                                    .InvokeAsync();
+
+    // Check if Environment.ExitCode was set by a subcommand
+    if (Environment.ExitCode != 0)
+    {
+        return Environment.ExitCode;
+    }
+
+    return exitCode;
 }
 catch (Exception ex)
 {
