@@ -1,8 +1,13 @@
+using System.ClientModel;
+using System.ClientModel.Primitives;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DataIngestion.Chunkers;
 using Microsoft.Extensions.Logging;
 using Microsoft.ML.Tokenizers;
 using Microsoft.SemanticKernel.Connectors.SqliteVec;
+using OllamaSharp;
+using OpenAI;
 using SourceChat.Features.Shared;
 using SourceChat.Infrastructure.Configuration;
 using SourceChat.Infrastructure.Parsing;
@@ -47,162 +52,229 @@ internal class IngestionService
                                                             ChunkingStrategy strategy,
                                                             bool incremental)
     {
-        ProgressReporter progress = new();
-        IngestionResult result = new();
+        IngestionDocumentReader reader = new MarkdownReader();
+        ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
+        {
+            builder.AddConsole();
+            builder.SetMinimumLevel(LogLevel.Trace);
+        });
+
+        // Use the vector store manager to get the embedding generator based on configured provider
+        IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator = _vectorStoreManager.GetEmbeddingGenerator();
+
+        // Get chat client based on provider
+        IChatClient chatClient = GetChatClient(loggerFactory);
+
+        EnricherOptions enricherOptions = new(chatClient)
+        {
+            LoggerFactory = loggerFactory
+        };
+
+        IngestionDocumentProcessor imageAlternativeTextEnricher = new ImageAlternativeTextEnricher(enricherOptions);
+
+        // Determine tokenizer model based on provider
+        string tokenizerModel = GetTokenizerModel();
+        IngestionChunkerOptions chunkerOptions = new(TiktokenTokenizer.CreateForModel(tokenizerModel))
+        {
+            MaxTokensPerChunk = _config.MaxTokensPerChunk,
+            OverlapTokens = _config.ChunkOverlapTokens,
+        };
+
+        IngestionChunker<string> chunker = CreateChunker(strategy, chunkerOptions, embeddingGenerator);
+
+        IngestionChunkProcessor<string> summaryEnricher = new SummaryEnricher(enricherOptions);
+
+        // Use the vector store from the manager (it already has the correct connection string and embedding generator)
+        SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
+
+        // Determine embedding dimension based on provider and model
+        int embeddingDimension = GetEmbeddingDimension();
+
+        using VectorStoreWriter<string> writer = new(vectorStore,
+                                                     dimensionCount: embeddingDimension,
+                                                     new VectorStoreWriterOptions
+                                                     {
+                                                         CollectionName = "data"
+                                                     });
+
+        // Compose data ingestion pipeline
+        using IngestionPipeline<string> pipeline = new(reader,
+                                                       chunker,
+                                                       writer,
+                                                       new IngestionPipelineOptions
+                                                       {
+                                                           ActivitySourceName = "SourceChat",
+                                                       },
+                                                       loggerFactory)
+        {
+            DocumentProcessors = { imageAlternativeTextEnricher },
+            ChunkProcessors = { summaryEnricher }
+        };
+
+        DirectoryInfo directory = new(path);
+
+        // Use the provided patterns parameter instead of hardcoding
+        int filesProcessed = 0;
+        int errors = 0;
 
         try
         {
-            List<string> files = patterns.Split(';', StringSplitOptions.RemoveEmptyEntries)
-                                         .Select(p => p.Trim())
-                                         .SelectMany(p => Directory.GetFiles(path,
-                                                                             searchPattern: p,
-                                                                             SearchOption.AllDirectories))
-                                         .Distinct()
-                                         .OrderBy(f => f)
-                                         .ToList();
-
-            if (files.Count == 0)
+            await foreach (Microsoft.Extensions.DataIngestion.IngestionResult result in pipeline.ProcessAsync(directory, searchPattern: patterns))
             {
-                _logger.LogWarning("No files found matching patterns: {Patterns}", patterns);
+                _logger.LogInformation("Completed processing '{DocumentId}'. Succeeded: '{Succeeded}'.", result.DocumentId, result.Succeeded);
 
-                return result;
-            }
-
-            if (incremental)
-            {
-                List<string> changedFiles = [];
-
-                foreach (string file in files)
+                if (result.Succeeded)
                 {
-                    FileInfo fileInfo = new(file);
-
-                    if (_changeDetector.HasFileChanged(file, fileInfo.LastWriteTimeUtc))
-                    {
-                        changedFiles.Add(file);
-                    }
-                    else
-                    {
-                        _logger.LogDebug("Skipping unchanged file: {FileName}", Path.GetFileName(file));
-                    }
+                    filesProcessed++;
+                    // Note: Chunk count would need to be tracked differently as the pipeline doesn't expose it directly
                 }
-
-                List<string> trackedFiles = _changeDetector.GetTrackedFiles();
-
-                HashSet<string> currentFiles = files.Select(Path.GetFullPath)
-                                                    .ToHashSet();
-
-                string[] staleFiles = trackedFiles.Where(file => !currentFiles.Contains(file))
-                                                  .ToArray();
-                foreach (string file in staleFiles)
+                else
                 {
-                    _logger.LogInformation("Removing deleted file from index: {File}", file);
-                    _changeDetector.RemoveFileTracking(file);
-                    // TODO: Remove chunks from vector store
-                }
-
-                files = changedFiles;
-
-                if (files.Count == 0)
-                {
-                    Console.WriteLine("No changed files detected. Ingestion skipped.");
-
-                    return result;
+                    errors++;
+                    _logger.LogWarning("Failed to process document: {DocumentId}", result.DocumentId);
                 }
             }
 
-            progress.Start(files.Count);
-
-            foreach (string filePath in files)
-            {
-                try
-                {
-                    IFileParser? parser = _parsers.FirstOrDefault(p => p.CanParse(filePath));
-
-                    if (parser is null)
-                    {
-                        _logger.LogWarning("No parser found for {FileName}, skipping.", Path.GetFileName(filePath));
-                    }
-                    else
-                    {
-                        _logger.LogInformation("Processing {FileName}...", Path.GetFileName(filePath));
-
-                        (string content, Dictionary<string, string> metadata) = await parser.ParseAsync(filePath);
-
-                        FileInfo fileInfo = new(filePath);
-                        metadata["file_path"] = filePath;
-                        metadata["file_name"] = fileInfo.Name;
-                        metadata["file_size"] = fileInfo.Length.ToString();
-                        metadata["last_modified"] = fileInfo.LastWriteTimeUtc.ToString(format: "O");
-
-                        IngestionDocumentSection section = new(content)
-                        {
-                            // Metadata = metadata // TODO: how can we set metadata
-                        };
-                        IngestionDocument document = new(identifier: filePath);
-                        document.Sections.Add(section);
-
-                        IngestionChunker<string> chunker = CreateChunker(strategy);
-
-                        IAsyncEnumerable<IngestionChunk<string>> chunks = chunker.ProcessAsync(document);
-
-                        SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
-
-                        using VectorStoreWriter<string> writer = new(vectorStore, dimensionCount: 4096);
-
-                        await writer.WriteAsync(chunks);
-
-                        int chunksCreated = await chunks.CountAsync();
-
-                        result.FilesProcessed++;
-                        result.TotalChunks += chunksCreated;
-
-                        progress.ReportFileProgress(Path.GetFileName(filePath), chunksCreated);
-
-                        string hash = await _changeDetector.GetFileHashAsync(filePath);
-                        _changeDetector.UpdateFileTracking(filePath, fileInfo.LastWriteTimeUtc, hash);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    result.Errors++;
-                    progress.ReportError(Path.GetFileName(filePath), ex);
-                    _logger.LogError(ex, "Error processing file: {File}", filePath);
-                }
-            }
-
-            progress.Complete();
-
-            _changeDetector.SaveTracking();
-
-            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Fatal error during ingestion");
-
+            _logger.LogError(ex, "Processing failed.");
             throw;
         }
+
+        IngestionResult ingestionResult = new()
+        {
+            FilesProcessed = filesProcessed,
+            Errors = errors
+        };
+        // TotalChunks would need additional tracking to be accurate
+
+        return ingestionResult;
     }
 
-    private IngestionChunker<string> CreateChunker(ChunkingStrategy strategy)
+    private IChatClient GetChatClient(ILoggerFactory loggerFactory)
     {
-        TiktokenTokenizer tokenizer = TiktokenTokenizer.CreateForModel("gpt-4");
-        IngestionChunkerOptions options = new(tokenizer)
+        string provider = _config.AiProvider.ToLowerInvariant();
+
+        return provider switch
         {
-            MaxTokensPerChunk = _config.MaxTokensPerChunk,
-            OverlapTokens = _config.ChunkOverlapTokens
-        };
-
-        return strategy switch
-        {
-            ChunkingStrategy.Semantic => new SemanticSimilarityChunker(_vectorStoreManager.GetEmbeddingGenerator(),
-                                                                       options),
-
-            ChunkingStrategy.Section => new SectionChunker(options),
-
-            ChunkingStrategy.Structure => new HeaderChunker(options),
-
-            _ => throw new ArgumentException($"Unknown chunking strategy: {strategy}")
+            "openai" => GetOpenAIChatClient(),
+            "azureopenai" => GetAzureOpenAIChatClient(loggerFactory),
+            "ollama" => GetOllamaChatClient(),
+            _ => throw new InvalidOperationException($"Unknown AI provider: {_config.AiProvider}")
         };
     }
+
+    private IChatClient GetOllamaChatClient()
+    {
+        return new OllamaApiClient(new Uri(_config.OllamaEndpoint), _config.OllamaChatModel);
+    }
+
+    private IChatClient GetOpenAIChatClient()
+    {
+        OpenAIClient client = new(_config.OpenAiApiKey);
+        return client.GetChatClient(_config.OpenAiChatModel).AsIChatClient();
+    }
+
+    private IChatClient GetAzureOpenAIChatClient(ILoggerFactory loggerFactory)
+    {
+        ClientLoggingOptions clientLoggingOptions = new()
+        {
+            EnableLogging = true
+        };
+        OpenAIClientOptions openAiClientOptions = new()
+        {
+            Endpoint = new Uri(_config.AzureOpenAiEndpoint),
+            ClientLoggingOptions = clientLoggingOptions,
+        };
+
+        if (string.IsNullOrWhiteSpace(_config.AzureOpenAiApiKey))
+        {
+            throw new InvalidOperationException("AZURE_OPENAI_API_KEY must be set for AzureOpenAI provider");
+        }
+
+        ApiKeyCredential apiKeyCredential = new(_config.AzureOpenAiApiKey);
+        OpenAIClient openAIClient = new(apiKeyCredential, openAiClientOptions);
+        return openAIClient.GetChatClient(_config.AzureOpenAiChatDeployment).AsIChatClient();
+    }
+
+    private string GetTokenizerModel()
+    {
+        string provider = _config.AiProvider.ToLowerInvariant();
+
+        return provider switch
+        {
+            "openai" => _config.OpenAiChatModel,
+            "azureopenai" => _config.AzureOpenAiChatDeployment,
+            "ollama" => "gpt-4", // TiktokenTokenizer doesn't support Ollama model names, use a compatible default
+            _ => "gpt-4" // Default fallback
+        };
+    }
+
+    private int GetEmbeddingDimension()
+    {
+        string provider = _config.AiProvider.ToLowerInvariant();
+        string embeddingModel = provider switch
+        {
+            "openai" => _config.OpenAiEmbeddingModel,
+            "azureopenai" => _config.AzureOpenAiEmbeddingDeployment,
+            "ollama" => _config.OllamaEmbeddingModel,
+            _ => "text-embedding-3-small"
+        };
+
+        // Return dimension based on model
+        return embeddingModel.ToLowerInvariant() switch
+        {
+            "text-embedding-3-small" => 1536,
+            "text-embedding-3-large" => 3072,
+            "text-embedding-ada-002" => 1536,
+            "all-minilm" => 384, // Ollama's all-minilm model
+            "qwen3-embedding" => 4096, // Qwen3 embedding model has 4096 dimensions
+            _ => 1536 // Default fallback
+        };
+    }
+
+    private IngestionChunker<string> CreateChunker(ChunkingStrategy strategy,
+                                                   IngestionChunkerOptions options,
+                                                   IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator) => strategy switch
+                                                   {
+                                                       ChunkingStrategy.Semantic => new SemanticSimilarityChunker(embeddingGenerator, options),
+
+                                                       ChunkingStrategy.Section => new SectionChunker(options),
+
+                                                       ChunkingStrategy.Structure => new HeaderChunker(options),
+
+                                                       _ => throw new ArgumentException($"Unknown chunking strategy: {strategy}")
+                                                   };
+
+    // public class CodeFileReader : IngestionDocumentReader
+    // {
+    //     public override Task<IngestionDocument> ReadAsync(Stream source,
+    //                                                       string identifier,
+    //                                                       string mediaType,
+    //                                                       CancellationToken cancellationToken = new())
+    //     {
+    //         IngestionDocument ingestionDocument = new(identifier);
+    //
+    //         IngestionDocumentElement ingestionDocumentElement = new IngestionDocumentParagraph(markdown: "");
+    //         IngestionDocumentSection ingestionDocumentSection = new()
+    //                                                             {
+    //                                                                 Text = "", //TODO: get file text from source
+    //                                                                 Elements =
+    //                                                                 {
+    //                                                                     ingestionDocumentElement
+    //                                                                 },
+    //                                                                 Metadata =
+    //                                                                 {
+    //                                                                     new KeyValuePair<string, object?>(key: "media_type", value: mediaType)
+    //                                                                     // TODO: add other helpful metadata
+    //                                                                 },
+    //                                                                 PageNumber = 0
+    //                                                             };
+    //
+    //         ingestionDocument.Sections.Add(ingestionDocumentSection);
+    //
+    //         return Task.FromResult(ingestionDocument);
+    //     }
+    // }
 }
