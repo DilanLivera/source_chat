@@ -1,4 +1,5 @@
-using Azure.AI.Inference;
+using Azure;
+using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel.Connectors.SqliteVec;
@@ -75,11 +76,11 @@ internal class VectorStoreManager : IDisposable
 
     private IEmbeddingGenerator<string, Embedding<float>> CreateAzureOpenAIEmbeddingGenerator()
     {
-        ChatCompletionsClient client = new(new Uri(_config.AzureOpenAiEndpoint),
-                                           new Azure.AzureKeyCredential(_config.AzureOpenAiApiKey));
+        AzureOpenAIClient client = new(new Uri(_config.AzureOpenAiEndpoint),
+                                       new AzureKeyCredential(_config.AzureOpenAiApiKey));
 
-        // TODO: Azure implementation may need adjustment based on SDK version
-        throw new NotImplementedException("Azure OpenAI embedding generator needs SDK-specific implementation");
+        return client.GetEmbeddingClient(_config.AzureOpenAiEmbeddingDeployment)
+                     .AsIEmbeddingGenerator();
     }
 
     private IEmbeddingGenerator<string, Embedding<float>> CreateOllamaEmbeddingGenerator() => new OllamaApiClient(new Uri(_config.OllamaEndpoint));
