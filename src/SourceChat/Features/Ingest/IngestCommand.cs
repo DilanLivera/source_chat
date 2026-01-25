@@ -43,7 +43,7 @@ internal static class IngestCommand
         command.Add(incrementalOption);
         command.Add(logLevelOption);
 
-        command.SetAction(result =>
+        command.SetAction(async result =>
         {
             LogLevel logLevel = result.GetValue(logLevelOption);
             using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
@@ -67,7 +67,7 @@ internal static class IngestCommand
                 if (!Directory.Exists(path))
                 {
                     Console.WriteLine($"Error: Directory not found: {path}");
-
+                    Environment.ExitCode = 1;
                     return;
                 }
 
@@ -85,22 +85,22 @@ internal static class IngestCommand
                                                         changeDetector,
                                                         loggerFactory.CreateLogger<IngestionService>());
 
-                IngestionResult ingestionResult = ingestionService.IngestDirectoryAsync(path,
-                                                                                        patterns,
-                                                                                        strategy,
-                                                                                        incremental)
-                                                                  .GetAwaiter()
-                                                                  .GetResult();
+                IngestionResult ingestionResult = await ingestionService.IngestDirectoryAsync(path,
+                                                                                              patterns,
+                                                                                              strategy,
+                                                                                              incremental);
 
                 if (ingestionResult.Errors > 0)
                 {
                     Console.WriteLine($"\n⚠ Completed with {ingestionResult.Errors} error(s)");
+                    Environment.ExitCode = 1;
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Fatal error: {ex.Message}");
                 logger.LogError(ex, "Ingestion failed");
+                Environment.ExitCode = 1;
             }
         });
 
