@@ -36,9 +36,32 @@ internal class QueryService
         try
         {
             SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
-            SqliteCollection<string, VectorRecord> collection = vectorStore.GetCollection<string, VectorRecord>(name: "default");
 
-            List<VectorSearchResult<VectorRecord>> searchResults = await collection.SearchAsync(question, top: maxResults)
+            // Use GetDynamicCollection since GetCollection doesn't support Dictionary<string, object?>
+            // The collection was created by VectorStoreWriter with dynamic schema
+            VectorStoreCollection<object, Dictionary<string, object?>> collection;
+            try
+            {
+                // GetDynamicCollection requires a definition - we need to provide the vector dimensions
+                int embeddingDimension = GetEmbeddingDimension();
+                VectorStoreCollectionDefinition definition = new()
+                {
+                    // The definition needs to match how VectorStoreWriter created the collection
+                    // Since it's dynamic, we just need the vector dimensions
+                };
+                collection = vectorStore.GetDynamicCollection(name: "data", definition);
+            }
+            catch (VectorStoreException ex) when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 1)
+            {
+                return "No data has been ingested yet. Please run the 'ingest' command first.";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get collection 'data'");
+                throw new InvalidOperationException("Unable to access the 'data' collection. Please ensure files have been ingested first.", ex);
+            }
+
+            List<VectorSearchResult<Dictionary<string, object?>>> searchResults = await collection.SearchAsync(question, top: maxResults)
                                                                                    .ToListAsync();
 
             if (searchResults.Count == 0)
@@ -48,7 +71,16 @@ internal class QueryService
 
             // Prepare context from search results
             List<string> retrievedChunks = searchResults
-                                           .Select(r => $"[Score: {r.Score:F4}] {r.Record.Text}")
+                                           .Select(r =>
+                                           {
+                                               // Extract content from dictionary record
+                                               string text = "";
+                                               if (r.Record.TryGetValue("content", out object? contentObj) && contentObj is string content)
+                                               {
+                                                   text = content;
+                                               }
+                                               return $"[Score: {r.Score:F4}] {text}";
+                                           })
                                            .ToList();
 
             // Build prompt with context
@@ -177,6 +209,29 @@ internal class QueryService
 
     private IChatClient CreateOllamaChatClient() => new OllamaApiClient(new Uri(_config.OllamaEndpoint),
                                                                         _config.OllamaChatModel);
+
+    private int GetEmbeddingDimension()
+    {
+        string provider = _config.AiProvider.ToLowerInvariant();
+        string embeddingModel = provider switch
+        {
+            "openai" => _config.OpenAiEmbeddingModel,
+            "azureopenai" => _config.AzureOpenAiEmbeddingDeployment,
+            "ollama" => _config.OllamaEmbeddingModel,
+            _ => "text-embedding-3-small"
+        };
+
+        // Return dimension based on model
+        return embeddingModel.ToLowerInvariant() switch
+        {
+            "text-embedding-3-small" => 1536,
+            "text-embedding-3-large" => 3072,
+            "text-embedding-ada-002" => 1536,
+            "all-minilm" => 384, // Ollama's all-minilm model
+            "qwen3-embedding" => 4096, // Qwen3 embedding model has 4096 dimensions
+            _ => 1536 // Default fallback
+        };
+    }
 
     private string BuildSystemPrompt(string context)
     {

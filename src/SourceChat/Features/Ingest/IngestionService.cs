@@ -26,6 +26,7 @@ internal class IngestionService
     private readonly FileChangeDetector _changeDetector;
     private readonly ILogger<IngestionService> _logger;
     private readonly List<IFileParser> _parsers;
+    private VectorStoreCollection<object, Dictionary<string, object?>>? _lastIngestionCollection;
 
     public IngestionService(
         ConfigurationService config,
@@ -163,70 +164,75 @@ internal class IngestionService
             _logger.LogInformation("Found {Count} files matching patterns: {Files}", matchingFiles.Count, string.Join(", ", matchingFiles.Select(Path.GetFileName)));
 
             int resultCount = 0;
-            IAsyncEnumerable<Microsoft.Extensions.DataIngestion.IngestionResult>? results = null;
-            try
-            {
-                results = pipeline.ProcessAsync(directory, searchPattern: "*.md");
-                _logger.LogInformation("Pipeline.ProcessAsync called successfully");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to start pipeline processing: {Message}", ex.Message);
-                throw;
-            }
 
-            await foreach (Microsoft.Extensions.DataIngestion.IngestionResult result in results)
+            // Process each pattern separately since ProcessAsync only accepts a single search pattern
+            foreach (string pattern in patternArray)
             {
-                resultCount++;
-                _logger.LogInformation("Completed processing '{DocumentId}'. Succeeded: '{Succeeded}'.", result.DocumentId, result.Succeeded);
-
-                // Track the file in FileChangeDetector regardless of success/failure
-                // DocumentId might be a URI (file://) or a file path
-                string filePath = result.DocumentId;
-
-                // Handle URI format (file:///path/to/file)
-                if (filePath.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+                IAsyncEnumerable<Microsoft.Extensions.DataIngestion.IngestionResult>? results = null;
+                try
                 {
-                    Uri uri = new(filePath);
-                    filePath = uri.LocalPath;
+                    results = pipeline.ProcessAsync(directory, searchPattern: pattern);
+                    _logger.LogInformation("Pipeline.ProcessAsync called successfully for pattern: {Pattern}", pattern);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to start pipeline processing for pattern {Pattern}: {Message}", pattern, ex.Message);
+                    throw;
                 }
 
-                // Ensure we have a full path (DocumentId might be relative)
-                if (!Path.IsPathRooted(filePath))
+                await foreach (Microsoft.Extensions.DataIngestion.IngestionResult result in results)
                 {
-                    filePath = Path.Combine(path, filePath);
-                }
-                filePath = Path.GetFullPath(filePath);
+                    resultCount++;
+                    _logger.LogInformation("Completed processing '{DocumentId}'. Succeeded: '{Succeeded}'.", result.DocumentId, result.Succeeded);
 
-                // Try to track the file regardless of success/failure, as long as it exists
-                if (File.Exists(filePath))
-                {
-                    try
+                    // Track the file in FileChangeDetector regardless of success/failure
+                    // DocumentId might be a URI (file://) or a file path
+                    string filePath = result.DocumentId;
+
+                    // Handle URI format (file:///path/to/file)
+                    if (filePath.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
                     {
-                        FileInfo fileInfo = new(filePath);
-                        string hash = await _changeDetector.GetFileHashAsync(filePath);
-                        _changeDetector.UpdateFileTracking(filePath, fileInfo.LastWriteTime, hash);
-                        _logger.LogInformation("Tracked file: {FilePath} (Succeeded: {Succeeded})", filePath, result.Succeeded);
+                        Uri uri = new(filePath);
+                        filePath = uri.LocalPath;
                     }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to track file: {FilePath}", filePath);
-                    }
-                }
-                else
-                {
-                    _logger.LogWarning("File not found for tracking: {FilePath} (DocumentId: {DocumentId})", filePath, result.DocumentId);
-                }
 
-                if (result.Succeeded)
-                {
-                    filesProcessed++;
-                    // Note: Chunk count would need to be tracked differently as the pipeline doesn't expose it directly
-                }
-                else
-                {
-                    errors++;
-                    _logger.LogWarning("Failed to process document: {DocumentId}", result.DocumentId);
+                    // Ensure we have a full path (DocumentId might be relative)
+                    if (!Path.IsPathRooted(filePath))
+                    {
+                        filePath = Path.Combine(path, filePath);
+                    }
+                    filePath = Path.GetFullPath(filePath);
+
+                    // Try to track the file regardless of success/failure, as long as it exists
+                    if (File.Exists(filePath))
+                    {
+                        try
+                        {
+                            FileInfo fileInfo = new(filePath);
+                            string hash = await _changeDetector.GetFileHashAsync(filePath);
+                            _changeDetector.UpdateFileTracking(filePath, fileInfo.LastWriteTime, hash);
+                            _logger.LogInformation("Tracked file: {FilePath} (Succeeded: {Succeeded})", filePath, result.Succeeded);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to track file: {FilePath}", filePath);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogWarning("File not found for tracking: {FilePath} (DocumentId: {DocumentId})", filePath, result.DocumentId);
+                    }
+
+                    if (result.Succeeded)
+                    {
+                        filesProcessed++;
+                        // Note: Chunk count would need to be tracked differently as the pipeline doesn't expose it directly
+                    }
+                    else
+                    {
+                        errors++;
+                        _logger.LogWarning("Failed to process document: {DocumentId}", result.DocumentId);
+                    }
                 }
             }
 
@@ -235,6 +241,19 @@ internal class IngestionService
             if (resultCount == 0)
             {
                 _logger.LogWarning("No results received from pipeline. This might indicate that no files were processed or the pipeline failed silently.");
+            }
+            else
+            {
+                // Store the collection reference for later use in GetIngestionSummaryAsync
+                // Only store it after processing is complete and data has been written
+                try
+                {
+                    _lastIngestionCollection = writer.VectorStoreCollection;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to get vector store collection reference: {Message}", ex.Message);
+                }
             }
 
         }
@@ -273,67 +292,73 @@ internal class IngestionService
 
         try
         {
-            SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
+            VectorStoreCollection<object, Dictionary<string, object?>>? collection = _lastIngestionCollection;
 
-            // Try to get the collection - it may not exist if no data was written
-            SqliteCollection<string, VectorRecord>? collection = null;
-            try
+            // If we don't have a collection reference from the last ingestion, try to get it from the vector store
+            if (collection == null)
             {
-                collection = vectorStore.GetCollection<string, VectorRecord>(name: "data");
-            }
-            catch (VectorStoreException ex) when (ex.InnerException is SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 1)
-            {
-                // Collection doesn't exist yet (SQLite error 1: no such table/column)
-                _logger.LogInformation("Collection 'data' does not exist yet. No summary available.");
-                return summaryChunks;
-            }
-            catch (VectorStoreException)
-            {
-                // Other vector store errors
-                _logger.LogInformation("Vector store collection not available.");
-                return summaryChunks;
+                SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
+
+                // Try to get the collection using the same name and type that VectorStoreWriter uses
+                // VectorStoreWriter<string> creates collections with Dictionary<string, object?> records
+                try
+                {
+                    collection = vectorStore.GetCollection<object, Dictionary<string, object?>>(name: "data");
+                }
+                catch (VectorStoreException ex) when (ex.InnerException is SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 1)
+                {
+                    _logger.LogInformation("Collection 'data' does not exist yet. No summary available.");
+                    return summaryChunks;
+                }
+                catch (VectorStoreException)
+                {
+                    _logger.LogInformation("Vector store collection not available.");
+                    return summaryChunks;
+                }
             }
 
             if (collection == null)
             {
+                _logger.LogInformation("Collection is null. No summary available.");
                 return summaryChunks;
             }
 
-            // Use a generic query to get diverse sample content from the ingested documents
+            // Use semantic search to verify ingestion worked, following the example pattern
+            // Search with a generic query to get diverse sample content
             string searchQuery = "summary overview content";
-            List<VectorSearchResult<VectorRecord>> searchResults = await collection.SearchAsync(searchQuery, top: topResults)
-                                                                                   .ToListAsync();
+            _logger.LogInformation("Performing semantic search on collection 'data' with query: '{Query}', top: {Top}", searchQuery, topResults);
 
-            foreach (VectorSearchResult<VectorRecord> result in searchResults)
+            await foreach (var result in collection.SearchAsync(searchQuery, top: topResults))
             {
-                summaryChunks.Add(new SummaryChunk
+                // Access content from the dictionary-like record, as shown in the example
+                if (result.Record.TryGetValue("content", out object? contentObj) && contentObj is string content)
                 {
-                    Score = result.Score.GetValueOrDefault(0.0),
-                    Content = result.Record.Text
-                });
+                    if (!string.IsNullOrWhiteSpace(content))
+                    {
+                        // Truncate content if too long for display
+                        string displayContent = content.Length > 500 ? content[..500] + "..." : content;
+
+                        summaryChunks.Add(new SummaryChunk
+                        {
+                            Score = result.Score.GetValueOrDefault(0.0),
+                            Content = displayContent
+                        });
+                    }
+                }
             }
 
-            _logger.LogInformation("Retrieved {Count} summary chunks from vector store", summaryChunks.Count);
+            _logger.LogInformation("Retrieved {Count} summary chunks from vector store using semantic search", summaryChunks.Count);
         }
         catch (VectorStoreException ex) when (ex.InnerException is SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 1)
         {
             // Collection doesn't exist (SQLite error 1: no such table/column)
             _logger.LogInformation("Collection 'data' does not exist. No summary available.");
-
-            throw;
-        }
-        catch (VectorStoreException ex)
-        {
-            // Other vector store errors
-            _logger.LogInformation("Vector store collection not available: {Message}", ex.Message);
-
-            throw;
+            return summaryChunks;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to retrieve ingestion summary: {Message}", ex.Message);
-
-            throw;
+            // Don't throw - return empty list instead to allow ingestion to complete
         }
 
         return summaryChunks;
@@ -433,6 +458,107 @@ internal class IngestionService
 
                                                        _ => throw new ArgumentException($"Unknown chunking strategy: {strategy}")
                                                    };
+
+    /// <summary>
+    /// Diagnostic method to inspect the actual SQLite database schema.
+    /// This helps identify schema mismatches between VectorStoreWriter and SqliteCollection.
+    /// </summary>
+    private async Task InspectDatabaseSchemaAsync()
+    {
+        try
+        {
+            string dbPath = _config.SqliteDbPath;
+            if (!File.Exists(dbPath))
+            {
+                _logger.LogInformation("Database file does not exist at: {DbPath}", dbPath);
+                return;
+            }
+
+            _logger.LogInformation("=== Database Schema Inspection ===");
+            _logger.LogInformation("Database path: {DbPath}", dbPath);
+
+            string connectionString = $"Data Source={dbPath};Pooling=false";
+            await using SqliteConnection connection = new(connectionString);
+            await connection.OpenAsync();
+
+            // Load vec0 extension if available (required for SqliteVec)
+            try
+            {
+                SqliteCommand loadExtensionCommand = connection.CreateCommand();
+                loadExtensionCommand.CommandText = "SELECT load_extension('vec0');";
+                await loadExtensionCommand.ExecuteNonQueryAsync();
+                _logger.LogInformation("Loaded vec0 extension successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to load vec0 extension (this is expected if vec0 is statically linked): {Message}", ex.Message);
+            }
+
+            // Get all tables
+            List<string> tables = new();
+            SqliteCommand tablesCommand = connection.CreateCommand();
+            tablesCommand.CommandText = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;";
+            await using SqliteDataReader tablesReader = await tablesCommand.ExecuteReaderAsync();
+            while (await tablesReader.ReadAsync())
+            {
+                string tableName = tablesReader.GetString(0);
+                tables.Add(tableName);
+            }
+
+            _logger.LogInformation("Found {Count} tables: {Tables}", tables.Count, string.Join(", ", tables));
+
+            // Inspect each table's schema
+            foreach (string tableName in tables)
+            {
+                _logger.LogInformation("--- Table: {TableName} ---", tableName);
+
+                // Get column information using PRAGMA
+                SqliteCommand pragmaCommand = connection.CreateCommand();
+                pragmaCommand.CommandText = $"PRAGMA table_info({tableName});";
+                await using SqliteDataReader pragmaReader = await pragmaCommand.ExecuteReaderAsync();
+
+                List<string> columns = new();
+                while (await pragmaReader.ReadAsync())
+                {
+                    int cid = pragmaReader.GetInt32(0);
+                    string name = pragmaReader.GetString(1);
+                    string type = pragmaReader.GetString(2);
+                    int notNull = pragmaReader.GetInt32(3);
+                    string defaultValue = pragmaReader.IsDBNull(4) ? "NULL" : pragmaReader.GetString(4);
+                    int pk = pragmaReader.GetInt32(5);
+
+                    columns.Add(name);
+                    _logger.LogInformation("  Column: {Name} ({Type}) [PK: {Pk}, NotNull: {NotNull}, Default: {Default}]",
+                        name, type, pk, notNull, defaultValue);
+                }
+
+                _logger.LogInformation("  Total columns: {Count} ({Columns})", columns.Count, string.Join(", ", columns));
+
+                // Get row count (skip for vec0 virtual tables as they may not support COUNT)
+                if (!tableName.StartsWith("vec_", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        SqliteCommand countCommand = connection.CreateCommand();
+                        countCommand.CommandText = $"SELECT COUNT(*) FROM {tableName};";
+                        object? countResult = await countCommand.ExecuteScalarAsync();
+                        int rowCount = countResult != null ? Convert.ToInt32(countResult) : 0;
+                        _logger.LogInformation("  Row count: {Count}", rowCount);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug("  Could not get row count: {Message}", ex.Message);
+                    }
+                }
+            }
+
+            _logger.LogInformation("=== End Schema Inspection ===");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to inspect database schema: {Message}", ex.Message);
+        }
+    }
 
     // public class CodeFileReader : IngestionDocumentReader
     // {
