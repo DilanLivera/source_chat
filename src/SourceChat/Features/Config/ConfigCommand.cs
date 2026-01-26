@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SourceChat.Infrastructure.Configuration;
 
@@ -19,17 +20,15 @@ internal static class ConfigCommand
         command.Add(showOption);
         command.Add(logLevelOption);
 
-        command.SetAction(result =>
+        command.SetAction(async result =>
         {
             LogLevel logLevel = result.GetValue(logLevelOption);
-            using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
-            {
-                builder.AddConsole();
-                builder.SetMinimumLevel(logLevel);
-            });
 
-            ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(ConfigCommand));
-            ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
+            ServiceCollection collection = ServiceCollectionFactory.Create(logLevel);
+            await using ServiceProvider serviceProvider = collection.BuildServiceProvider();
+
+            ILogger logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(ConfigCommand));
+            ConfigurationService config = serviceProvider.GetRequiredService<ConfigurationService>();
 
             try
             {

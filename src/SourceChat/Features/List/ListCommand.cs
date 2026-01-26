@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SourceChat.Infrastructure.Configuration;
 using SourceChat.Infrastructure.Storage;
@@ -20,23 +21,21 @@ internal static class ListCommand
         command.Add(statsOption);
         command.Add(logLevelOption);
 
-        command.SetAction(result =>
+        command.SetAction(async result =>
         {
             LogLevel logLevel = result.GetValue(logLevelOption);
-            using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
-            {
-                builder.AddConsole();
-                builder.SetMinimumLevel(logLevel);
-            });
 
-            ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(ListCommand));
-            ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
+            ServiceCollection collection = ServiceCollectionFactory.Create(logLevel);
+            await using ServiceProvider serviceProvider = collection.BuildServiceProvider();
+
+            ILogger logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(ListCommand));
+            ConfigurationService config = serviceProvider.GetRequiredService<ConfigurationService>();
 
             bool showStats = result.GetRequiredValue(statsOption);
 
             try
             {
-                FileChangeDetector changeDetector = new(config.SqliteDbPath);
+                FileChangeDetector changeDetector = serviceProvider.GetRequiredService<FileChangeDetector>();
                 List<string> trackedFiles = changeDetector.GetTrackedFiles();
 
                 if (trackedFiles.Count == 0)

@@ -53,7 +53,7 @@ public class IngestionServiceUnitTests : IDisposable
 
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         VectorStoreManager vectorStoreManager = new(config, loggerFactory.CreateLogger<VectorStoreManager>());
-        FileChangeDetector changeDetector = new(config.SqliteDbPath);
+        FileChangeDetector changeDetector = new(config);
         IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory.CreateLogger<IngestionService>());
 
         // Act: This is where you can set a breakpoint!
@@ -93,7 +93,7 @@ public class IngestionServiceUnitTests : IDisposable
 
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         VectorStoreManager vectorStoreManager = new(config, loggerFactory.CreateLogger<VectorStoreManager>());
-        FileChangeDetector changeDetector = new(config.SqliteDbPath);
+        FileChangeDetector changeDetector = new(config);
         IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory.CreateLogger<IngestionService>());
 
         // Act: Only process .md files - set breakpoint here to debug!
@@ -121,7 +121,7 @@ public class IngestionServiceUnitTests : IDisposable
 
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         VectorStoreManager vectorStoreManager = new(config, loggerFactory.CreateLogger<VectorStoreManager>());
-        FileChangeDetector changeDetector = new(config.SqliteDbPath);
+        FileChangeDetector changeDetector = new(config);
         IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory.CreateLogger<IngestionService>());
 
         // Act: Set breakpoint here!

@@ -12,7 +12,6 @@ using OllamaSharp;
 using OpenAI;
 using SourceChat.Features.Shared;
 using SourceChat.Infrastructure.Configuration;
-using SourceChat.Infrastructure.Parsing;
 using SourceChat.Infrastructure.Storage;
 using IngestionResult = SourceChat.Features.Shared.IngestionResult;
 
@@ -25,7 +24,6 @@ internal class IngestionService
     private readonly VectorStoreManager _vectorStoreManager;
     private readonly FileChangeDetector _changeDetector;
     private readonly ILogger<IngestionService> _logger;
-    private readonly List<IFileParser> _parsers;
     private VectorStoreCollection<object, Dictionary<string, object?>>? _lastIngestionCollection;
 
     public IngestionService(
@@ -39,15 +37,6 @@ internal class IngestionService
         _changeDetector = changeDetector;
         _logger = logger;
 
-        _parsers =
-        [
-            new CSharpParser(),
-            new MarkdownParser(),
-            new JsonParser(),
-            new YamlParser(),
-            new XmlParser(),
-            new PlainTextParser()
-        ];
     }
 
     public async Task<IngestionResult> IngestDirectoryAsync(string path,

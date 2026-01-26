@@ -1,7 +1,7 @@
 using System.CommandLine;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SourceChat.Infrastructure.Configuration;
-using SourceChat.Infrastructure.Storage;
 
 namespace SourceChat.Features.Query;
 
@@ -34,17 +34,15 @@ internal static class QueryCommand
         command.Add(interactiveOption);
         command.Add(logLevelOption);
 
-        command.SetAction(result =>
+        command.SetAction(async result =>
         {
             LogLevel logLevel = result.GetValue(logLevelOption);
-            using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
-            {
-                builder.AddConsole();
-                builder.SetMinimumLevel(logLevel);
-            });
 
-            ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(QueryCommand));
-            ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
+            ServiceCollection collection = ServiceCollectionFactory.Create(logLevel);
+            await using ServiceProvider serviceProvider = collection.BuildServiceProvider();
+
+            ILogger logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(QueryCommand));
+            ConfigurationService config = serviceProvider.GetRequiredService<ConfigurationService>();
 
             string? question = result.GetRequiredValue(questionArgument);
             int maxResults = result.GetRequiredValue(maxResultsOption);
@@ -54,24 +52,16 @@ internal static class QueryCommand
             {
                 config.Validate();
 
-                VectorStoreManager vectorStoreManager = new(config,
-                                                            loggerFactory.CreateLogger<VectorStoreManager>());
-                QueryService queryService = new(config,
-                                                vectorStoreManager,
-                                                loggerFactory.CreateLogger<QueryService>());
+                QueryService queryService = serviceProvider.GetRequiredService<QueryService>();
 
                 if (string.IsNullOrWhiteSpace(question) || interactive)
                 {
-                    queryService.RunInteractiveQueryAsync()
-                                .GetAwaiter()
-                                .GetResult();
+                    await queryService.RunInteractiveQueryAsync();
                 }
                 else
                 {
                     Console.WriteLine($"Question: {question}\n");
-                    string answer = queryService.QueryAsync(question, maxResults)
-                                                .GetAwaiter()
-                                                .GetResult();
+                    string answer = await queryService.QueryAsync(question, maxResults);
                     Console.WriteLine($"Answer: {answer}");
                 }
             }

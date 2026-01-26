@@ -1,8 +1,8 @@
 using System.CommandLine;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SourceChat.Features.Shared;
 using SourceChat.Infrastructure.Configuration;
-using SourceChat.Infrastructure.Storage;
 
 namespace SourceChat.Features.Ingest;
 
@@ -37,7 +37,6 @@ internal static class IngestCommand
                               description: "Ingest code and documentation files into the vector database");
 
         command.Add(pathArgument);
-
         command.Add(strategyOption);
         command.Add(patternsOption);
         command.Add(incrementalOption);
@@ -46,14 +45,12 @@ internal static class IngestCommand
         command.SetAction(async result =>
         {
             LogLevel logLevel = result.GetValue(logLevelOption);
-            using ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
-            {
-                builder.AddConsole();
-                builder.SetMinimumLevel(logLevel);
-            });
 
-            ILogger logger = loggerFactory.CreateLogger(categoryName: nameof(IngestCommand));
-            ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
+            ServiceCollection collection = ServiceCollectionFactory.Create(logLevel);
+            await using ServiceProvider serviceProvider = collection.BuildServiceProvider();
+
+            ILogger logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(IngestCommand));
+            ConfigurationService config = serviceProvider.GetRequiredService<ConfigurationService>();
 
             string path = result.GetRequiredValue(pathArgument);
             ChunkingStrategy strategy = result.GetRequiredValue(strategyOption);
@@ -77,13 +74,7 @@ internal static class IngestCommand
                 Console.WriteLine($"Incremental: {incremental}");
                 Console.WriteLine();
 
-                VectorStoreManager vectorStoreManager = new(config,
-                                                            loggerFactory.CreateLogger<VectorStoreManager>());
-                FileChangeDetector changeDetector = new(config.SqliteDbPath);
-                IngestionService ingestionService = new(config,
-                                                        vectorStoreManager,
-                                                        changeDetector,
-                                                        loggerFactory.CreateLogger<IngestionService>());
+                IngestionService ingestionService = serviceProvider.GetRequiredService<IngestionService>();
 
                 IngestionResult ingestionResult = await ingestionService.IngestDirectoryAsync(path,
                                                                                               patterns,

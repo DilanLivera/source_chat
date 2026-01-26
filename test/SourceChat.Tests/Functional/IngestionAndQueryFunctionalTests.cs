@@ -78,7 +78,7 @@ public class IngestionAndQueryFunctionalTests : IDisposable
 
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         VectorStoreManager vectorStoreManager = new(config, loggerFactory.CreateLogger<VectorStoreManager>());
-        FileChangeDetector changeDetector = new(config.SqliteDbPath);
+        FileChangeDetector changeDetector = new(config);
         IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory.CreateLogger<IngestionService>());
         QueryService queryService = new(config, vectorStoreManager, loggerFactory.CreateLogger<QueryService>());
 
