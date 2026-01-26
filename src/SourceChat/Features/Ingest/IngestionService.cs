@@ -299,11 +299,13 @@ internal class IngestionService
             {
                 SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
 
-                // Try to get the collection using the same name and type that VectorStoreWriter uses
+                // Use GetDynamicCollection since GetCollection doesn't support Dictionary<string, object?>
                 // VectorStoreWriter<string> creates collections with Dictionary<string, object?> records
                 try
                 {
-                    collection = vectorStore.GetCollection<object, Dictionary<string, object?>>(name: "data");
+                    int embeddingDimension = GetEmbeddingDimension();
+                    VectorStoreCollectionDefinition definition = CreateCollectionDefinition(embeddingDimension);
+                    collection = vectorStore.GetDynamicCollection(name: "data", definition);
                 }
                 catch (VectorStoreException ex) when (ex.InnerException is SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 1)
                 {
@@ -420,6 +422,29 @@ internal class IngestionService
             "azureopenai" => _config.AzureOpenAiChatDeployment,
             "ollama" => "gpt-4", // TiktokenTokenizer doesn't support Ollama model names, use a compatible default
             _ => "gpt-4" // Default fallback
+        };
+    }
+
+    private VectorStoreCollectionDefinition CreateCollectionDefinition(int embeddingDimension)
+    {
+        // Create a definition that matches the schema created by VectorStoreWriter<string>
+        // VectorStoreWriter creates collections with Dictionary<string, object?> records
+        // The definition needs to specify the key property, vector property, and data properties
+        // Based on the actual database schema, the key column is "key" and there are additional columns
+        return new VectorStoreCollectionDefinition
+        {
+            Properties =
+            [
+                // Key property - VectorStoreWriter<string> uses "key" as the column name
+                // Key properties must be one of: int, long, string, Guid
+                new VectorStoreKeyProperty("key", typeof(string)),
+                // Vector property - stores the embedding vector (stored in vec_data virtual table as "embedding")
+                new VectorStoreVectorProperty("embedding", typeof(ReadOnlyMemory<float>), dimensions: embeddingDimension),
+                // Data properties - match the actual schema columns
+                new VectorStoreDataProperty("content", typeof(string)),
+                new VectorStoreDataProperty("context", typeof(string)),
+                new VectorStoreDataProperty("documentid", typeof(string))
+            ]
         };
     }
 

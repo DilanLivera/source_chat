@@ -42,13 +42,9 @@ internal class QueryService
             VectorStoreCollection<object, Dictionary<string, object?>> collection;
             try
             {
-                // GetDynamicCollection requires a definition - we need to provide the vector dimensions
+                // GetDynamicCollection requires a definition with key property, vector property, and data properties
                 int embeddingDimension = GetEmbeddingDimension();
-                VectorStoreCollectionDefinition definition = new()
-                {
-                    // The definition needs to match how VectorStoreWriter created the collection
-                    // Since it's dynamic, we just need the vector dimensions
-                };
+                VectorStoreCollectionDefinition definition = CreateCollectionDefinition(embeddingDimension);
                 collection = vectorStore.GetDynamicCollection(name: "data", definition);
             }
             catch (VectorStoreException ex) when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 1)
@@ -209,6 +205,29 @@ internal class QueryService
 
     private IChatClient CreateOllamaChatClient() => new OllamaApiClient(new Uri(_config.OllamaEndpoint),
                                                                         _config.OllamaChatModel);
+
+    private VectorStoreCollectionDefinition CreateCollectionDefinition(int embeddingDimension)
+    {
+        // Create a definition that matches the schema created by VectorStoreWriter<string>
+        // VectorStoreWriter creates collections with Dictionary<string, object?> records
+        // The definition needs to specify the key property, vector property, and data properties
+        // Based on the actual database schema, the key column is "key" and there are additional columns
+        return new VectorStoreCollectionDefinition
+        {
+            Properties =
+            [
+                // Key property - VectorStoreWriter<string> uses "key" as the column name
+                // Key properties must be one of: int, long, string, Guid
+                new VectorStoreKeyProperty("key", typeof(string)),
+                // Vector property - stores the embedding vector (stored in vec_data virtual table as "embedding")
+                new VectorStoreVectorProperty("embedding", typeof(ReadOnlyMemory<float>), dimensions: embeddingDimension),
+                // Data properties - match the actual schema columns
+                new VectorStoreDataProperty("content", typeof(string)),
+                new VectorStoreDataProperty("context", typeof(string)),
+                new VectorStoreDataProperty("documentid", typeof(string))
+            ]
+        };
+    }
 
     private int GetEmbeddingDimension()
     {
