@@ -37,6 +37,7 @@ public class IngestionResult
     public int FilesProcessed { get; set; }
     public int TotalChunks { get; set; }
     public int Errors { get; set; }
+    public List<SummaryChunk> SummaryChunks { get; set; } = [];
 }
 
 public class SummaryChunk

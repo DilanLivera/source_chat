@@ -96,9 +96,8 @@ internal static class IngestCommand
                 }
 
                 Console.WriteLine("\n=== Ingestion Summary ===");
-                List<SummaryChunk> summaryChunks = await ingestionService.GetIngestionSummaryAsync(topResults: 5);
 
-                if (summaryChunks.Count <= 0)
+                if (ingestionResult.SummaryChunks.Count <= 0)
                 {
                     Console.WriteLine("No summary content available.");
 
@@ -107,7 +106,7 @@ internal static class IngestCommand
 
                 Console.WriteLine("\nSample content from ingested documents:\n");
 
-                foreach (SummaryChunk chunk in summaryChunks)
+                foreach (SummaryChunk chunk in ingestionResult.SummaryChunks)
                 {
                     Console.WriteLine($"Score: {chunk.Score:F4}");
                     Console.WriteLine($"\tContent: {chunk.Content}");
