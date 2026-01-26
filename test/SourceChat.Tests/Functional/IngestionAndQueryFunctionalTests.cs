@@ -4,9 +4,8 @@ using SourceChat.Features.Query;
 using SourceChat.Features.Shared;
 using SourceChat.Infrastructure.Configuration;
 using SourceChat.Infrastructure.Storage;
-using Xunit;
 
-namespace SourceChat.Tests;
+namespace SourceChat.Tests.Functional;
 
 public class IngestionAndQueryFunctionalTests : IDisposable
 {
