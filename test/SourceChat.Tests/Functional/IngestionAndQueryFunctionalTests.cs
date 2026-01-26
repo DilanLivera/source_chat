@@ -79,7 +79,7 @@ public class IngestionAndQueryFunctionalTests : IDisposable
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         VectorStoreManager vectorStoreManager = new(config, loggerFactory.CreateLogger<VectorStoreManager>());
         FileChangeDetector changeDetector = new(config);
-        IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory.CreateLogger<IngestionService>());
+        IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory);
         QueryService queryService = new(config, vectorStoreManager, loggerFactory.CreateLogger<QueryService>());
 
         // Act - Ingestion

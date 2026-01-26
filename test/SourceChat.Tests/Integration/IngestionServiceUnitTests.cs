@@ -54,7 +54,7 @@ public class IngestionServiceUnitTests : IDisposable
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         VectorStoreManager vectorStoreManager = new(config, loggerFactory.CreateLogger<VectorStoreManager>());
         FileChangeDetector changeDetector = new(config);
-        IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory.CreateLogger<IngestionService>());
+        IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory);
 
         // Act: This is where you can set a breakpoint!
         IngestionResult result = await ingestionService.IngestDirectoryAsync(
@@ -94,7 +94,7 @@ public class IngestionServiceUnitTests : IDisposable
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         VectorStoreManager vectorStoreManager = new(config, loggerFactory.CreateLogger<VectorStoreManager>());
         FileChangeDetector changeDetector = new(config);
-        IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory.CreateLogger<IngestionService>());
+        IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory);
 
         // Act: Only process .md files - set breakpoint here to debug!
         IngestionResult result = await ingestionService.IngestDirectoryAsync(
@@ -122,7 +122,7 @@ public class IngestionServiceUnitTests : IDisposable
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         VectorStoreManager vectorStoreManager = new(config, loggerFactory.CreateLogger<VectorStoreManager>());
         FileChangeDetector changeDetector = new(config);
-        IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory.CreateLogger<IngestionService>());
+        IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory);
 
         // Act: Set breakpoint here!
         IngestionResult result = await ingestionService.IngestDirectoryAsync(

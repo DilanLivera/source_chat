@@ -23,6 +23,7 @@ internal class IngestionService
     private readonly ConfigurationService _config;
     private readonly VectorStoreManager _vectorStoreManager;
     private readonly FileChangeDetector _changeDetector;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<IngestionService> _logger;
     private VectorStoreCollection<object, Dictionary<string, object?>>? _lastIngestionCollection;
 
@@ -30,12 +31,13 @@ internal class IngestionService
         ConfigurationService config,
         VectorStoreManager vectorStoreManager,
         FileChangeDetector changeDetector,
-        ILogger<IngestionService> logger)
+        ILoggerFactory loggerFactory)
     {
         _config = config;
         _vectorStoreManager = vectorStoreManager;
         _changeDetector = changeDetector;
-        _logger = logger;
+        _loggerFactory = loggerFactory;
+        _logger = loggerFactory.CreateLogger<IngestionService>();
 
     }
 
@@ -45,11 +47,6 @@ internal class IngestionService
                                                             bool incremental)
     {
         IngestionDocumentReader reader = new MarkdownReader();
-        ILoggerFactory loggerFactory = LoggerFactory.Create(builder =>
-        {
-            builder.AddConsole();
-            builder.SetMinimumLevel(LogLevel.Trace);
-        });
 
         // Use the vector store manager to get the embedding generator based on configured provider
         IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator = _vectorStoreManager.GetEmbeddingGenerator();
@@ -58,7 +55,7 @@ internal class IngestionService
         IChatClient? chatClient = null;
         try
         {
-            chatClient = GetChatClient(loggerFactory);
+            chatClient = GetChatClient();
         }
         catch (Exception ex)
         {
@@ -73,7 +70,7 @@ internal class IngestionService
         {
             EnricherOptions enricherOptions = new(chatClient)
             {
-                LoggerFactory = loggerFactory
+                LoggerFactory = _loggerFactory
             };
             imageAlternativeTextEnricher = new ImageAlternativeTextEnricher(enricherOptions);
             summaryEnricher = new SummaryEnricher(enricherOptions);
@@ -114,7 +111,7 @@ internal class IngestionService
                                                        {
                                                            ActivitySourceName = "SourceChat",
                                                        },
-                                                       loggerFactory);
+                                                       _loggerFactory);
 
         // Only add enrichers if they were successfully created
         if (imageAlternativeTextEnricher != null)
@@ -355,14 +352,14 @@ internal class IngestionService
         return summaryChunks;
     }
 
-    private IChatClient GetChatClient(ILoggerFactory loggerFactory)
+    private IChatClient GetChatClient()
     {
         string provider = _config.AiProvider.ToLowerInvariant();
 
         return provider switch
         {
             "openai" => GetOpenAIChatClient(),
-            "azureopenai" => GetAzureOpenAIChatClient(loggerFactory),
+            "azureopenai" => GetAzureOpenAIChatClient(),
             "ollama" => GetOllamaChatClient(),
             _ => throw new InvalidOperationException($"Unknown AI provider: {_config.AiProvider}")
         };
@@ -379,7 +376,7 @@ internal class IngestionService
         return client.GetChatClient(_config.OpenAiChatModel).AsIChatClient();
     }
 
-    private IChatClient GetAzureOpenAIChatClient(ILoggerFactory loggerFactory)
+    private IChatClient GetAzureOpenAIChatClient()
     {
         ClientLoggingOptions clientLoggingOptions = new()
         {
@@ -473,135 +470,4 @@ internal class IngestionService
                                                        _ => throw new ArgumentException($"Unknown chunking strategy: {strategy}")
                                                    };
 
-    /// <summary>
-    /// Diagnostic method to inspect the actual SQLite database schema.
-    /// This helps identify schema mismatches between VectorStoreWriter and SqliteCollection.
-    /// </summary>
-    private async Task InspectDatabaseSchemaAsync()
-    {
-        try
-        {
-            string dbPath = _config.SqliteDbPath;
-            if (!File.Exists(dbPath))
-            {
-                _logger.LogInformation("Database file does not exist at: {DbPath}", dbPath);
-                return;
-            }
-
-            _logger.LogInformation("=== Database Schema Inspection ===");
-            _logger.LogInformation("Database path: {DbPath}", dbPath);
-
-            string connectionString = $"Data Source={dbPath};Pooling=false";
-            await using SqliteConnection connection = new(connectionString);
-            await connection.OpenAsync();
-
-            // Load vec0 extension if available (required for SqliteVec)
-            try
-            {
-                SqliteCommand loadExtensionCommand = connection.CreateCommand();
-                loadExtensionCommand.CommandText = "SELECT load_extension('vec0');";
-                await loadExtensionCommand.ExecuteNonQueryAsync();
-                _logger.LogInformation("Loaded vec0 extension successfully");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to load vec0 extension (this is expected if vec0 is statically linked): {Message}", ex.Message);
-            }
-
-            // Get all tables
-            List<string> tables = new();
-            SqliteCommand tablesCommand = connection.CreateCommand();
-            tablesCommand.CommandText = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;";
-            await using SqliteDataReader tablesReader = await tablesCommand.ExecuteReaderAsync();
-            while (await tablesReader.ReadAsync())
-            {
-                string tableName = tablesReader.GetString(0);
-                tables.Add(tableName);
-            }
-
-            _logger.LogInformation("Found {Count} tables: {Tables}", tables.Count, string.Join(", ", tables));
-
-            // Inspect each table's schema
-            foreach (string tableName in tables)
-            {
-                _logger.LogInformation("--- Table: {TableName} ---", tableName);
-
-                // Get column information using PRAGMA
-                SqliteCommand pragmaCommand = connection.CreateCommand();
-                pragmaCommand.CommandText = $"PRAGMA table_info({tableName});";
-                await using SqliteDataReader pragmaReader = await pragmaCommand.ExecuteReaderAsync();
-
-                List<string> columns = new();
-                while (await pragmaReader.ReadAsync())
-                {
-                    int cid = pragmaReader.GetInt32(0);
-                    string name = pragmaReader.GetString(1);
-                    string type = pragmaReader.GetString(2);
-                    int notNull = pragmaReader.GetInt32(3);
-                    string defaultValue = pragmaReader.IsDBNull(4) ? "NULL" : pragmaReader.GetString(4);
-                    int pk = pragmaReader.GetInt32(5);
-
-                    columns.Add(name);
-                    _logger.LogInformation("  Column: {Name} ({Type}) [PK: {Pk}, NotNull: {NotNull}, Default: {Default}]",
-                        name, type, pk, notNull, defaultValue);
-                }
-
-                _logger.LogInformation("  Total columns: {Count} ({Columns})", columns.Count, string.Join(", ", columns));
-
-                // Get row count (skip for vec0 virtual tables as they may not support COUNT)
-                if (!tableName.StartsWith("vec_", StringComparison.OrdinalIgnoreCase))
-                {
-                    try
-                    {
-                        SqliteCommand countCommand = connection.CreateCommand();
-                        countCommand.CommandText = $"SELECT COUNT(*) FROM {tableName};";
-                        object? countResult = await countCommand.ExecuteScalarAsync();
-                        int rowCount = countResult != null ? Convert.ToInt32(countResult) : 0;
-                        _logger.LogInformation("  Row count: {Count}", rowCount);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogDebug("  Could not get row count: {Message}", ex.Message);
-                    }
-                }
-            }
-
-            _logger.LogInformation("=== End Schema Inspection ===");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to inspect database schema: {Message}", ex.Message);
-        }
-    }
-
-    // public class CodeFileReader : IngestionDocumentReader
-    // {
-    //     public override Task<IngestionDocument> ReadAsync(Stream source,
-    //                                                       string identifier,
-    //                                                       string mediaType,
-    //                                                       CancellationToken cancellationToken = new())
-    //     {
-    //         IngestionDocument ingestionDocument = new(identifier);
-    //
-    //         IngestionDocumentElement ingestionDocumentElement = new IngestionDocumentParagraph(markdown: "");
-    //         IngestionDocumentSection ingestionDocumentSection = new()
-    //                                                             {
-    //                                                                 Text = "", //TODO: get file text from source
-    //                                                                 Elements =
-    //                                                                 {
-    //                                                                     ingestionDocumentElement
-    //                                                                 },
-    //                                                                 Metadata =
-    //                                                                 {
-    //                                                                     new KeyValuePair<string, object?>(key: "media_type", value: mediaType)
-    //                                                                     // TODO: add other helpful metadata
-    //                                                                 },
-    //                                                                 PageNumber = 0
-    //                                                             };
-    //
-    //         ingestionDocument.Sections.Add(ingestionDocumentSection);
-    //
-    //         return Task.FromResult(ingestionDocument);
-    //     }
-    // }
 }
