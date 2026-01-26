@@ -85,33 +85,39 @@ internal static class IngestCommand
                 {
                     Console.WriteLine($"\n⚠ Completed with {ingestionResult.Errors} error(s)");
                     Environment.ExitCode = 1;
+
+                    return;
                 }
 
-                if (ingestionResult.FilesProcessed > 0)
+                if (ingestionResult.FilesProcessed <= 0)
                 {
-                    Console.WriteLine("\n=== Ingestion Summary ===");
-                    List<SummaryChunk> summaryChunks = await ingestionService.GetIngestionSummaryAsync(topResults: 5);
+                    Console.WriteLine("No files were processed.");
+                    return;
+                }
 
-                    if (summaryChunks.Count > 0)
-                    {
-                        Console.WriteLine("\nSample content from ingested documents:\n");
-                        foreach (SummaryChunk chunk in summaryChunks)
-                        {
-                            Console.WriteLine($"Score: {chunk.Score:F4}");
-                            Console.WriteLine($"\tContent: {chunk.Content}");
-                            Console.WriteLine();
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine("No summary content available.");
-                    }
+                Console.WriteLine("\n=== Ingestion Summary ===");
+                List<SummaryChunk> summaryChunks = await ingestionService.GetIngestionSummaryAsync(topResults: 5);
+
+                if (summaryChunks.Count <= 0)
+                {
+                    Console.WriteLine("No summary content available.");
+
+                    return;
+                }
+
+                Console.WriteLine("\nSample content from ingested documents:\n");
+
+                foreach (SummaryChunk chunk in summaryChunks)
+                {
+                    Console.WriteLine($"Score: {chunk.Score:F4}");
+                    Console.WriteLine($"\tContent: {chunk.Content}");
+                    Console.WriteLine();
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Fatal error: {ex.Message}");
                 logger.LogError(ex, "Ingestion failed");
+                Console.WriteLine($"Fatal error: {ex.Message}");
                 Environment.ExitCode = 1;
             }
         });
