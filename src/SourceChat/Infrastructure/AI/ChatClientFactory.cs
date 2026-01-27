@@ -71,6 +71,13 @@ internal sealed class ChatClientFactory
                            .AsIChatClient();
     }
 
-    private IChatClient CreateOllamaChatClient() => new OllamaApiClient(new Uri(_config.OllamaEndpoint),
-                                                                        _config.OllamaChatModel);
+    private IChatClient CreateOllamaChatClient()
+    {
+        HttpClient client = new()
+        {
+            BaseAddress = new Uri(_config.OllamaEndpoint),
+            Timeout = TimeSpan.FromSeconds(1000)
+        };
+        return new OllamaApiClient(client, _config.OllamaChatModel);
+    }
 }

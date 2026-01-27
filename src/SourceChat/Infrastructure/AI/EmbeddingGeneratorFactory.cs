@@ -60,6 +60,13 @@ internal sealed class EmbeddingGeneratorFactory
                      .AsIEmbeddingGenerator();
     }
 
-    private IEmbeddingGenerator<string, Embedding<float>> CreateOllamaEmbeddingGenerator() => new OllamaApiClient(new Uri(_config.OllamaEndpoint),
-                                                                                                                  _config.OllamaEmbeddingModel);
+    private IEmbeddingGenerator<string, Embedding<float>> CreateOllamaEmbeddingGenerator()
+    {
+        HttpClient client = new()
+        {
+            BaseAddress = new Uri(_config.OllamaEndpoint),
+            Timeout = TimeSpan.FromSeconds(1000)
+        };
+        return new OllamaApiClient(client, _config.OllamaEmbeddingModel);
+    }
 }
