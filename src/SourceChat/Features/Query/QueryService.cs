@@ -11,20 +11,20 @@ using ChatRole = Microsoft.Extensions.AI.ChatRole;
 
 namespace SourceChat.Features.Query;
 
-internal class QueryService
+internal sealed class QueryService
 {
     private readonly ConfigurationService _config;
-    private readonly VectorStoreManager _vectorStoreManager;
-    private readonly ILogger<QueryService> _logger;
     private IChatClient? _chatClient;
+    private readonly ILogger<QueryService> _logger;
+    private readonly SqliteVectorStore _vectorStore;
 
     public QueryService(
         ConfigurationService config,
-        VectorStoreManager vectorStoreManager,
+        VectorStoreProvider vectorStoreProvider,
         ILogger<QueryService> logger)
     {
         _config = config;
-        _vectorStoreManager = vectorStoreManager;
+        _vectorStore = vectorStoreProvider.GetVectorStore();
         _logger = logger;
     }
 
@@ -35,8 +35,6 @@ internal class QueryService
     {
         try
         {
-            SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
-
             // Use GetDynamicCollection since GetCollection doesn't support Dictionary<string, object?>
             // The collection was created by VectorStoreWriter with dynamic schema
             VectorStoreCollection<object, Dictionary<string, object?>> collection;
@@ -45,7 +43,7 @@ internal class QueryService
                 // GetDynamicCollection requires a definition with key property, vector property, and data properties
                 int embeddingDimension = GetEmbeddingDimension();
                 VectorStoreCollectionDefinition definition = CreateCollectionDefinition(embeddingDimension);
-                collection = vectorStore.GetDynamicCollection(name: "data", definition);
+                collection = _vectorStore.GetDynamicCollection(name: "data", definition);
             }
             catch (VectorStoreException ex) when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 1)
             {
@@ -66,18 +64,17 @@ internal class QueryService
             }
 
             // Prepare context from search results
-            List<string> retrievedChunks = searchResults
-                                           .Select(r =>
-                                           {
-                                               // Extract content from dictionary record
-                                               string text = "";
-                                               if (r.Record.TryGetValue("content", out object? contentObj) && contentObj is string content)
-                                               {
-                                                   text = content;
-                                               }
-                                               return $"[Score: {r.Score:F4}] {text}";
-                                           })
-                                           .ToList();
+            List<string> retrievedChunks = searchResults.Select(r =>
+                                                        {
+                                                            // Extract content from dictionary record
+                                                            string text = "";
+                                                            if (r.Record.TryGetValue("content", out object? contentObj) && contentObj is string content)
+                                                            {
+                                                                text = content;
+                                                            }
+                                                            return $"[Score: {r.Score:F4}] {text}";
+                                                        })
+                                                        .ToList();
 
             // Build prompt with context
             string contextText = string.Join("\n\n", retrievedChunks);

@@ -79,11 +79,12 @@ public class IngestionAndQueryFunctionalTests : IDisposable
         });
 
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
-        VectorStoreManager vectorStoreManager = new(config, loggerFactory.CreateLogger<VectorStoreManager>());
+        EmbeddingGeneratorFactory embeddingFactory = new(config, loggerFactory.CreateLogger<EmbeddingGeneratorFactory>());
+        VectorStoreProvider vectorStoreProvider = new(embeddingFactory, config, loggerFactory.CreateLogger<VectorStoreProvider>());
         FileChangeDetector changeDetector = new(config);
         IngestionDocumentReader reader = new MarkdownReader();
-        IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory, reader);
-        QueryService queryService = new(config, vectorStoreManager, loggerFactory.CreateLogger<QueryService>());
+        IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, changeDetector, loggerFactory, reader);
+        QueryService queryService = new(config, vectorStoreProvider, loggerFactory.CreateLogger<QueryService>());
 
         // Act - Ingestion
         IngestionResult ingestionResult = await ingestionService.IngestDirectoryAsync(
@@ -130,8 +131,9 @@ public class IngestionAndQueryFunctionalTests : IDisposable
         });
 
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
-        VectorStoreManager vectorStoreManager = new(config, loggerFactory.CreateLogger<VectorStoreManager>());
-        QueryService queryService = new(config, vectorStoreManager, loggerFactory.CreateLogger<QueryService>());
+        EmbeddingGeneratorFactory embeddingFactory = new(config, loggerFactory.CreateLogger<EmbeddingGeneratorFactory>());
+        VectorStoreProvider vectorStoreProvider = new(embeddingFactory, config, loggerFactory.CreateLogger<VectorStoreProvider>());
+        QueryService queryService = new(config, vectorStoreProvider, loggerFactory.CreateLogger<QueryService>());
 
         // Act & Assert: Query without any ingestion should throw an exception
         // The collection doesn't exist, so GetDynamicCollection succeeds but SearchAsync fails

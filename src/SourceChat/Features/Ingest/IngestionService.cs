@@ -18,29 +18,32 @@ using IngestionResult = SourceChat.Features.Shared.IngestionResult;
 namespace SourceChat.Features.Ingest;
 
 // https://learn.microsoft.com/en-us/dotnet/ai/conceptual/data-ingestion
-internal class IngestionService
+internal sealed class IngestionService
 {
     private const int TopResults = 5;
     private readonly ConfigurationService _config;
-    private readonly VectorStoreManager _vectorStoreManager;
-    private readonly FileChangeDetector _changeDetector;
+    private readonly IEmbeddingGenerator<string, Embedding<float>> _embeddingGenerator;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<IngestionService> _logger;
     private readonly IngestionDocumentReader _reader;
+    private readonly FileChangeDetector _changeDetector;
+    private readonly SqliteVectorStore _vectorStore;
 
     public IngestionService(
         ConfigurationService config,
-        VectorStoreManager vectorStoreManager,
+        VectorStoreProvider vectorStoreProvider,
+        EmbeddingGeneratorFactory embeddingFactory,
         FileChangeDetector changeDetector,
         ILoggerFactory loggerFactory,
         IngestionDocumentReader reader)
     {
         _config = config;
-        _vectorStoreManager = vectorStoreManager;
+        _vectorStore = vectorStoreProvider.GetVectorStore();
         _changeDetector = changeDetector;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<IngestionService>();
         _reader = reader;
+        _embeddingGenerator = embeddingFactory.Create();
     }
 
     public async Task<IngestionResult> IngestDirectoryAsync(string path,
@@ -54,8 +57,6 @@ internal class IngestionService
 
             throw new DirectoryNotFoundException($"Directory not found: {path}");
         }
-
-        IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator = _vectorStoreManager.GetEmbeddingGenerator();
 
         IChatClient chatClient = GetChatClient();
 
@@ -73,13 +74,11 @@ internal class IngestionService
             OverlapTokens = _config.ChunkOverlapTokens,
         };
 
-        IngestionChunker<string> chunker = CreateChunker(strategy, chunkerOptions, embeddingGenerator);
-
-        SqliteVectorStore vectorStore = _vectorStoreManager.GetVectorStore();
+        IngestionChunker<string> chunker = CreateChunker(strategy, chunkerOptions, _embeddingGenerator);
 
         int embeddingDimension = GetEmbeddingDimension();
 
-        using VectorStoreWriter<string> writer = new(vectorStore,
+        using VectorStoreWriter<string> writer = new(_vectorStore,
                                                      dimensionCount: embeddingDimension,
                                                      new VectorStoreWriterOptions
                                                      {

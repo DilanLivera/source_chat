@@ -23,7 +23,8 @@ internal static class ServiceCollectionFactory
         ServiceCollection services = new();
 
         services.AddSingleton<ConfigurationService>()
-                .AddSingleton<VectorStoreManager>()
+                .AddSingleton<EmbeddingGeneratorFactory>()
+                .AddSingleton<VectorStoreProvider>()
                 .AddScoped<FileChangeDetector>()
                 .AddScoped<IngestionService>()
                 .AddScoped<QueryService>()

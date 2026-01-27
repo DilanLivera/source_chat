@@ -2,7 +2,6 @@ using Azure;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.SemanticKernel.Connectors.SqliteVec;
 using OllamaSharp;
 using OpenAI;
 using SourceChat.Infrastructure.Configuration;
@@ -10,50 +9,28 @@ using SourceChat.Infrastructure.Configuration;
 namespace SourceChat.Infrastructure.Storage;
 
 // https://learn.microsoft.com/en-us/dotnet/ai/iembeddinggenerator
-internal class VectorStoreManager : IDisposable
+internal sealed class EmbeddingGeneratorFactory
 {
     private readonly ConfigurationService _config;
-    private readonly ILogger<VectorStoreManager> _logger;
-    private SqliteVectorStore? _vectorStore;
-    private IEmbeddingGenerator<string, Embedding<float>>? _embeddingGenerator;
+    private readonly ILogger<EmbeddingGeneratorFactory> _logger;
+    private IEmbeddingGenerator<string, Embedding<float>>? _cachedInstance;
 
-    public VectorStoreManager(ConfigurationService config, ILogger<VectorStoreManager> logger)
+    public EmbeddingGeneratorFactory(ConfigurationService config, ILogger<EmbeddingGeneratorFactory> logger)
     {
         _config = config;
         _logger = logger;
     }
 
-    public SqliteVectorStore GetVectorStore()
+    public IEmbeddingGenerator<string, Embedding<float>> Create()
     {
-        if (_vectorStore is not null)
+        if (_cachedInstance is not null)
         {
-            return _vectorStore;
-        }
-
-        IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator = GetEmbeddingGenerator();
-
-        SqliteVectorStoreOptions sqliteVectorStoreOptions = new()
-        {
-            EmbeddingGenerator = embeddingGenerator
-        };
-        string connectionString = $"Data Source={_config.SqliteDbPath};Pooling=false";
-        _vectorStore = new SqliteVectorStore(connectionString, sqliteVectorStoreOptions);
-
-        _logger.LogInformation("Initialized SQLite vector store at {Path}", _config.SqliteDbPath);
-
-        return _vectorStore;
-    }
-
-    public IEmbeddingGenerator<string, Embedding<float>> GetEmbeddingGenerator()
-    {
-        if (_embeddingGenerator is not null)
-        {
-            return _embeddingGenerator;
+            return _cachedInstance;
         }
 
         string provider = _config.AiProvider.ToLowerInvariant();
 
-        _embeddingGenerator = provider switch
+        _cachedInstance = provider switch
         {
             "openai" => CreateOpenAIEmbeddingGenerator(),
             "azureopenai" => CreateAzureOpenAIEmbeddingGenerator(),
@@ -63,7 +40,7 @@ internal class VectorStoreManager : IDisposable
 
         _logger.LogInformation("Initialized embedding generator for provider: {Provider}", _config.AiProvider);
 
-        return _embeddingGenerator;
+        return _cachedInstance;
     }
 
     private IEmbeddingGenerator<string, Embedding<float>> CreateOpenAIEmbeddingGenerator()
@@ -83,10 +60,6 @@ internal class VectorStoreManager : IDisposable
                      .AsIEmbeddingGenerator();
     }
 
-    private IEmbeddingGenerator<string, Embedding<float>> CreateOllamaEmbeddingGenerator() => new OllamaApiClient(new Uri(_config.OllamaEndpoint), _config.OllamaEmbeddingModel);
-
-    public void Dispose()
-    {
-        _vectorStore?.Dispose();
-    }
+    private IEmbeddingGenerator<string, Embedding<float>> CreateOllamaEmbeddingGenerator() => new OllamaApiClient(new Uri(_config.OllamaEndpoint),
+                                                                                                                  _config.OllamaEmbeddingModel);
 }
