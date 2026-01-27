@@ -1,5 +1,3 @@
-using System.ClientModel;
-using System.ClientModel.Primitives;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DataIngestion;
@@ -8,8 +6,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.VectorData;
 using Microsoft.ML.Tokenizers;
 using Microsoft.SemanticKernel.Connectors.SqliteVec;
-using OllamaSharp;
-using OpenAI;
 using SourceChat.Features.Shared;
 using SourceChat.Infrastructure.AI;
 using SourceChat.Infrastructure.Configuration;
@@ -30,11 +26,13 @@ internal sealed class IngestionService
     private readonly IngestionDocumentReader _reader;
     private readonly FileChangeDetector _changeDetector;
     private readonly SqliteVectorStore _vectorStore;
+    private readonly IChatClient _chatClient;
 
     public IngestionService(
         ConfigurationService config,
         VectorStoreProvider vectorStoreProvider,
         EmbeddingGeneratorFactory embeddingFactory,
+        ChatClientFactory chatClientFactory,
         FileChangeDetector changeDetector,
         ILoggerFactory loggerFactory,
         IngestionDocumentReader reader)
@@ -46,6 +44,7 @@ internal sealed class IngestionService
         _logger = loggerFactory.CreateLogger<IngestionService>();
         _reader = reader;
         _embeddingGenerator = embeddingFactory.Create();
+        _chatClient = chatClientFactory.Create();
     }
 
     public async Task<IngestionResult> IngestDirectoryAsync(string path,
@@ -60,9 +59,7 @@ internal sealed class IngestionService
             throw new DirectoryNotFoundException($"Directory not found: {path}");
         }
 
-        IChatClient chatClient = GetChatClient();
-
-        EnricherOptions enricherOptions = new(chatClient)
+        EnricherOptions enricherOptions = new(_chatClient)
         {
             LoggerFactory = _loggerFactory
         };
@@ -265,51 +262,6 @@ internal sealed class IngestionService
         return ingestionResult;
     }
 
-    private IChatClient GetChatClient()
-    {
-        string provider = _config.AiProvider.ToLowerInvariant();
-
-        return provider switch
-        {
-            "openai" => GetOpenAIChatClient(),
-            "azureopenai" => GetAzureOpenAIChatClient(),
-            "ollama" => GetOllamaChatClient(),
-            _ => throw new InvalidOperationException($"Unknown AI provider: {_config.AiProvider}")
-        };
-    }
-
-    private IChatClient GetOllamaChatClient()
-    {
-        return new OllamaApiClient(new Uri(_config.OllamaEndpoint), _config.OllamaChatModel);
-    }
-
-    private IChatClient GetOpenAIChatClient()
-    {
-        OpenAIClient client = new(_config.OpenAiApiKey);
-        return client.GetChatClient(_config.OpenAiChatModel).AsIChatClient();
-    }
-
-    private IChatClient GetAzureOpenAIChatClient()
-    {
-        ClientLoggingOptions clientLoggingOptions = new()
-        {
-            EnableLogging = true
-        };
-        OpenAIClientOptions openAiClientOptions = new()
-        {
-            Endpoint = new Uri(_config.AzureOpenAiEndpoint),
-            ClientLoggingOptions = clientLoggingOptions,
-        };
-
-        if (string.IsNullOrWhiteSpace(_config.AzureOpenAiApiKey))
-        {
-            throw new InvalidOperationException("AZURE_OPENAI_API_KEY must be set for AzureOpenAI provider");
-        }
-
-        ApiKeyCredential apiKeyCredential = new(_config.AzureOpenAiApiKey);
-        OpenAIClient openAIClient = new(apiKeyCredential, openAiClientOptions);
-        return openAIClient.GetChatClient(_config.AzureOpenAiChatDeployment).AsIChatClient();
-    }
 
     private string GetTokenizerModel()
     {

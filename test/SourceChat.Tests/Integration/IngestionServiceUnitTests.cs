@@ -57,10 +57,11 @@ public class IngestionServiceUnitTests : IDisposable
 
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         EmbeddingGeneratorFactory embeddingFactory = new(config, loggerFactory.CreateLogger<EmbeddingGeneratorFactory>());
+        ChatClientFactory chatClientFactory = new(config, loggerFactory.CreateLogger<ChatClientFactory>());
         VectorStoreProvider vectorStoreProvider = new(embeddingFactory, config, loggerFactory.CreateLogger<VectorStoreProvider>());
         FileChangeDetector changeDetector = new(config);
         IngestionDocumentReader reader = new MarkdownReader();
-        IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, changeDetector, loggerFactory, reader);
+        IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, chatClientFactory, changeDetector, loggerFactory, reader);
 
         // Act: This is where you can set a breakpoint!
         IngestionResult result = await ingestionService.IngestDirectoryAsync(
@@ -99,10 +100,11 @@ public class IngestionServiceUnitTests : IDisposable
 
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         EmbeddingGeneratorFactory embeddingFactory = new(config, loggerFactory.CreateLogger<EmbeddingGeneratorFactory>());
+        ChatClientFactory chatClientFactory = new(config, loggerFactory.CreateLogger<ChatClientFactory>());
         VectorStoreProvider vectorStoreProvider = new(embeddingFactory, config, loggerFactory.CreateLogger<VectorStoreProvider>());
         FileChangeDetector changeDetector = new(config);
         IngestionDocumentReader reader = new MarkdownReader();
-        IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, changeDetector, loggerFactory, reader);
+        IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, chatClientFactory, changeDetector, loggerFactory, reader);
 
         // Act: Only process .md files - set breakpoint here to debug!
         IngestionResult result = await ingestionService.IngestDirectoryAsync(
@@ -129,10 +131,11 @@ public class IngestionServiceUnitTests : IDisposable
 
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         EmbeddingGeneratorFactory embeddingFactory = new(config, loggerFactory.CreateLogger<EmbeddingGeneratorFactory>());
+        ChatClientFactory chatClientFactory = new(config, loggerFactory.CreateLogger<ChatClientFactory>());
         VectorStoreProvider vectorStoreProvider = new(embeddingFactory, config, loggerFactory.CreateLogger<VectorStoreProvider>());
         FileChangeDetector changeDetector = new(config);
         IngestionDocumentReader reader = new MarkdownReader();
-        IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, changeDetector, loggerFactory, reader);
+        IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, chatClientFactory, changeDetector, loggerFactory, reader);
 
         // Act: Set breakpoint here!
         IngestionResult result = await ingestionService.IngestDirectoryAsync(

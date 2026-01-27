@@ -82,10 +82,11 @@ public class IngestionAndQueryFunctionalTests : IDisposable
 
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         EmbeddingGeneratorFactory embeddingFactory = new(config, loggerFactory.CreateLogger<EmbeddingGeneratorFactory>());
+        ChatClientFactory chatClientFactory = new(config, loggerFactory.CreateLogger<ChatClientFactory>());
         VectorStoreProvider vectorStoreProvider = new(embeddingFactory, config, loggerFactory.CreateLogger<VectorStoreProvider>());
         FileChangeDetector changeDetector = new(config);
         IngestionDocumentReader reader = new MarkdownReader();
-        IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, changeDetector, loggerFactory, reader);
+        IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, chatClientFactory, changeDetector, loggerFactory, reader);
         QueryService queryService = new(config, vectorStoreProvider, loggerFactory.CreateLogger<QueryService>());
 
         // Act - Ingestion

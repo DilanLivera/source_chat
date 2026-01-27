@@ -26,6 +26,7 @@ internal static class ServiceCollectionFactory
 
         services.AddSingleton<ConfigurationService>()
                 .AddSingleton<EmbeddingGeneratorFactory>()
+                .AddSingleton<ChatClientFactory>()
                 .AddSingleton<VectorStoreProvider>()
                 .AddScoped<FileChangeDetector>()
                 .AddScoped<IngestionService>()
