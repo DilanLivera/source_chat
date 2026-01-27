@@ -1,9 +1,11 @@
+using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.Logging;
 using SourceChat.Features.Ingest;
 using SourceChat.Features.Query;
 using SourceChat.Features.Shared;
 using SourceChat.Infrastructure.Configuration;
 using SourceChat.Infrastructure.Storage;
+using IngestionResult = SourceChat.Features.Shared.IngestionResult;
 
 namespace SourceChat.Tests.Functional;
 
@@ -79,7 +81,8 @@ public class IngestionAndQueryFunctionalTests : IDisposable
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
         VectorStoreManager vectorStoreManager = new(config, loggerFactory.CreateLogger<VectorStoreManager>());
         FileChangeDetector changeDetector = new(config);
-        IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory);
+        IngestionDocumentReader reader = new MarkdownReader();
+        IngestionService ingestionService = new(config, vectorStoreManager, changeDetector, loggerFactory, reader);
         QueryService queryService = new(config, vectorStoreManager, loggerFactory.CreateLogger<QueryService>());
 
         // Act - Ingestion

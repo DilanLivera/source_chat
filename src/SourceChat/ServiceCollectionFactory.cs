@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SourceChat.Features.Ingest;
@@ -26,6 +27,7 @@ internal static class ServiceCollectionFactory
                 .AddScoped<FileChangeDetector>()
                 .AddScoped<IngestionService>()
                 .AddScoped<QueryService>()
+                .AddScoped<IngestionDocumentReader>(_ => new MarkdownReader())
                 .AddLogging(builder =>
                 {
                     builder.AddConsole();

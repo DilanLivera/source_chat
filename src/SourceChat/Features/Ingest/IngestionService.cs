@@ -26,19 +26,21 @@ internal class IngestionService
     private readonly FileChangeDetector _changeDetector;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<IngestionService> _logger;
+    private readonly IngestionDocumentReader _reader;
 
     public IngestionService(
         ConfigurationService config,
         VectorStoreManager vectorStoreManager,
         FileChangeDetector changeDetector,
-        ILoggerFactory loggerFactory)
+        ILoggerFactory loggerFactory,
+        IngestionDocumentReader reader)
     {
         _config = config;
         _vectorStoreManager = vectorStoreManager;
         _changeDetector = changeDetector;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<IngestionService>();
-
+        _reader = reader;
     }
 
     public async Task<IngestionResult> IngestDirectoryAsync(string path,
@@ -52,8 +54,6 @@ internal class IngestionService
 
             throw new DirectoryNotFoundException($"Directory not found: {path}");
         }
-
-        IngestionDocumentReader reader = new MarkdownReader();
 
         IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator = _vectorStoreManager.GetEmbeddingGenerator();
 
@@ -86,7 +86,7 @@ internal class IngestionService
                                                          CollectionName = "data"
                                                      });
 
-        using IngestionPipeline<string> pipeline = new(reader,
+        using IngestionPipeline<string> pipeline = new(_reader,
                                                        chunker,
                                                        writer,
                                                        new IngestionPipelineOptions
