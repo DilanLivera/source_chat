@@ -66,14 +66,27 @@ internal sealed class IngestionService
         IngestionDocumentProcessor imageAlternativeTextEnricher = new ImageAlternativeTextEnricher(enricherOptions);
         IngestionChunkProcessor<string> summaryEnricher = new SummaryEnricher(enricherOptions);
 
-        string tokenizerModel = GetTokenizerModel();
+        string tokenizerModel = _config.AiProvider.ToLowerInvariant() switch
+        {
+            "openai" => _config.OpenAiChatModel,
+            "azureopenai" => _config.AzureOpenAiChatDeployment,
+            "ollama" => "gpt-4", // TiktokenTokenizer doesn't support Ollama model names, use a compatible default
+            _ => "gpt-4" // Default fallback
+        };
+
         IngestionChunkerOptions chunkerOptions = new(TiktokenTokenizer.CreateForModel(tokenizerModel))
         {
             MaxTokensPerChunk = _config.MaxTokensPerChunk,
             OverlapTokens = _config.ChunkOverlapTokens,
         };
 
-        IngestionChunker<string> chunker = CreateChunker(strategy, chunkerOptions, _embeddingGenerator);
+        IngestionChunker<string> chunker = strategy switch
+        {
+            ChunkingStrategy.Semantic => new SemanticSimilarityChunker(_embeddingGenerator, chunkerOptions),
+            ChunkingStrategy.Section => new SectionChunker(chunkerOptions),
+            ChunkingStrategy.Structure => new HeaderChunker(chunkerOptions),
+            _ => throw new ArgumentException($"Unknown chunking strategy: {strategy}")
+        };
 
         int embeddingDimension = GetEmbeddingDimension();
 
@@ -262,20 +275,6 @@ internal sealed class IngestionService
         return ingestionResult;
     }
 
-
-    private string GetTokenizerModel()
-    {
-        string provider = _config.AiProvider.ToLowerInvariant();
-
-        return provider switch
-        {
-            "openai" => _config.OpenAiChatModel,
-            "azureopenai" => _config.AzureOpenAiChatDeployment,
-            "ollama" => "gpt-4", // TiktokenTokenizer doesn't support Ollama model names, use a compatible default
-            _ => "gpt-4" // Default fallback
-        };
-    }
-
     private int GetEmbeddingDimension()
     {
         string provider = _config.AiProvider.ToLowerInvariant();
@@ -298,18 +297,5 @@ internal sealed class IngestionService
             _ => 1536 // Default fallback
         };
     }
-
-    private IngestionChunker<string> CreateChunker(ChunkingStrategy strategy,
-                                                   IngestionChunkerOptions options,
-                                                   IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator) => strategy switch
-                                                   {
-                                                       ChunkingStrategy.Semantic => new SemanticSimilarityChunker(embeddingGenerator, options),
-
-                                                       ChunkingStrategy.Section => new SectionChunker(options),
-
-                                                       ChunkingStrategy.Structure => new HeaderChunker(options),
-
-                                                       _ => throw new ArgumentException($"Unknown chunking strategy: {strategy}")
-                                                   };
 
 }
