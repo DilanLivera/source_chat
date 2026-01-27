@@ -1,4 +1,3 @@
-using System.ClientModel;
 using Azure;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;

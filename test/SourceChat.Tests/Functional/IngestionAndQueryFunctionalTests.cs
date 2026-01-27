@@ -87,7 +87,7 @@ public class IngestionAndQueryFunctionalTests : IDisposable
         FileChangeDetector changeDetector = new(config);
         IngestionDocumentReader reader = new MarkdownReader();
         IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, chatClientFactory, changeDetector, loggerFactory, reader);
-        QueryService queryService = new(config, vectorStoreProvider, loggerFactory.CreateLogger<QueryService>());
+        QueryService queryService = new(chatClientFactory, config, vectorStoreProvider, loggerFactory.CreateLogger<QueryService>());
 
         // Act - Ingestion
         Result<IngestionResult> ingestionResult = await ingestionService.IngestDirectoryAsync(
@@ -135,9 +135,10 @@ public class IngestionAndQueryFunctionalTests : IDisposable
         });
 
         ConfigurationService config = new(loggerFactory.CreateLogger<ConfigurationService>());
+        ChatClientFactory chatClientFactory = new(config, loggerFactory.CreateLogger<ChatClientFactory>());
         EmbeddingGeneratorFactory embeddingFactory = new(config, loggerFactory.CreateLogger<EmbeddingGeneratorFactory>());
         VectorStoreProvider vectorStoreProvider = new(embeddingFactory, config, loggerFactory.CreateLogger<VectorStoreProvider>());
-        QueryService queryService = new(config, vectorStoreProvider, loggerFactory.CreateLogger<QueryService>());
+        QueryService queryService = new(chatClientFactory, config, vectorStoreProvider, loggerFactory.CreateLogger<QueryService>());
 
         // Act & Assert: Query without any ingestion should throw an exception
         // The collection doesn't exist, so GetDynamicCollection succeeds but SearchAsync fails

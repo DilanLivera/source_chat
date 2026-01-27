@@ -1,10 +1,8 @@
-using Azure.AI.Inference;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.VectorData;
 using Microsoft.SemanticKernel.Connectors.SqliteVec;
-using OllamaSharp;
-using OpenAI;
+using SourceChat.Infrastructure.AI;
 using SourceChat.Infrastructure.Configuration;
 using SourceChat.Infrastructure.Storage;
 using ChatRole = Microsoft.Extensions.AI.ChatRole;
@@ -14,11 +12,12 @@ namespace SourceChat.Features.Query;
 internal sealed class QueryService
 {
     private readonly ConfigurationService _config;
-    private IChatClient? _chatClient;
+    private readonly IChatClient _chatClient;
     private readonly ILogger<QueryService> _logger;
     private readonly SqliteVectorStore _vectorStore;
 
     public QueryService(
+        ChatClientFactory chatClientFactory,
         ConfigurationService config,
         VectorStoreProvider vectorStoreProvider,
         ILogger<QueryService> logger)
@@ -26,6 +25,7 @@ internal sealed class QueryService
         _config = config;
         _vectorStore = vectorStoreProvider.GetVectorStore();
         _logger = logger;
+        _chatClient = chatClientFactory.Create();
     }
 
     public async Task<string> QueryAsync(
@@ -42,7 +42,25 @@ internal sealed class QueryService
             {
                 // GetDynamicCollection requires a definition with key property, vector property, and data properties
                 int embeddingDimension = _config.GetEmbeddingDimension();
-                VectorStoreCollectionDefinition definition = CreateCollectionDefinition(embeddingDimension);
+                // Create a definition that matches the schema created by VectorStoreWriter<string>
+                // VectorStoreWriter creates collections with Dictionary<string, object?> records
+                // The definition needs to specify the key property, vector property, and data properties
+                // Based on the actual database schema, the key column is "key" and there are additional columns
+                VectorStoreCollectionDefinition definition = new()
+                {
+                    Properties =
+                                                                 [
+                                                                     // Key property - VectorStoreWriter<string> uses "key" as the column name
+                                                                     // Key properties must be one of: int, long, string, Guid
+                                                                     new VectorStoreKeyProperty(name: "key", typeof(string)),
+                                                                     // Vector property - stores the embedding vector (stored in vec_data virtual table as "embedding")
+                                                                     new VectorStoreVectorProperty(name: "embedding", typeof(ReadOnlyMemory<float>), dimensions: embeddingDimension),
+                                                                     // Data properties - match the actual schema columns
+                                                                     new VectorStoreDataProperty(name: "content", typeof(string)),
+                                                                     new VectorStoreDataProperty(name: "context", typeof(string)),
+                                                                     new VectorStoreDataProperty(name: "documentid", typeof(string))
+                                                                 ]
+                };
                 collection = _vectorStore.GetDynamicCollection(name: "data", definition);
             }
             catch (VectorStoreException ex) when (ex.InnerException is Microsoft.Data.Sqlite.SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 1)
@@ -78,9 +96,23 @@ internal sealed class QueryService
 
             // Build prompt with context
             string contextText = string.Join("\n\n", retrievedChunks);
-            string systemPrompt = BuildSystemPrompt(contextText);
+            string systemPrompt = $"""
+                                   You are SourceChat, an AI assistant that helps developers understand their codebase.
 
-            IChatClient chatClient = GetChatClient();
+                                   You have access to the following relevant code snippets and documentation from the codebase:
+
+                                   {contextText}
+
+                                   Instructions:
+                                   - Answer questions based on the provided code context
+                                   - Be specific and reference actual code when possible
+                                   - If you're unsure or the context doesn't contain relevant information, say so
+                                   - Provide file paths and line references when available
+                                   - Explain technical concepts clearly
+                                   - For follow-up questions, consider the conversation history
+
+                                   Answer the user's question clearly and concisely.
+                                   """;
 
             List<ChatMessage> messages = [new(ChatRole.System, systemPrompt)];
 
@@ -94,16 +126,16 @@ internal sealed class QueryService
             // Add current question
             messages.Add(new ChatMessage(ChatRole.User, question));
 
-            // Get response
-            ChatResponse response = await chatClient.GetResponseAsync(messages);
+            ChatResponse response = await _chatClient.GetResponseAsync(messages);
             string answer = response.Text;
 
-            // Update context
-            if (context != null)
+            if (context is null)
             {
-                context.AddUserMessage(question);
-                context.AddAssistantMessage(answer);
+                return answer;
             }
+
+            context.AddUserMessage(question);
+            context.AddAssistantMessage(answer);
 
             return answer;
         }
@@ -160,90 +192,5 @@ internal sealed class QueryService
                 _logger.LogError(ex, "Error in interactive query");
             }
         }
-    }
-
-    private IChatClient GetChatClient()
-    {
-        if (_chatClient != null)
-        {
-            return _chatClient;
-        }
-
-        string provider = _config.AiProvider.ToLowerInvariant();
-
-        _chatClient = provider switch
-        {
-            "openai" => CreateOpenAIChatClient(),
-            "azureopenai" => CreateAzureOpenAIChatClient(),
-            "ollama" => CreateOllamaChatClient(),
-            _ => throw new InvalidOperationException($"Unknown AI provider: {_config.AiProvider}")
-        };
-
-        _logger.LogInformation("Initialized chat client for provider: {Provider}", _config.AiProvider);
-
-        return _chatClient;
-    }
-
-    private IChatClient CreateOpenAIChatClient()
-    {
-        OpenAIClient client = new(_config.OpenAiApiKey);
-
-        return client.GetChatClient(_config.OpenAiChatModel).AsIChatClient();
-    }
-
-    private IChatClient CreateAzureOpenAIChatClient()
-    {
-        ChatCompletionsClient client = new(
-                                           new Uri(_config.AzureOpenAiEndpoint),
-                                           new Azure.AzureKeyCredential(_config.AzureOpenAiApiKey));
-
-        return client.AsIChatClient();
-    }
-
-    private IChatClient CreateOllamaChatClient() => new OllamaApiClient(new Uri(_config.OllamaEndpoint),
-                                                                        _config.OllamaChatModel);
-
-    private VectorStoreCollectionDefinition CreateCollectionDefinition(int embeddingDimension)
-    {
-        // Create a definition that matches the schema created by VectorStoreWriter<string>
-        // VectorStoreWriter creates collections with Dictionary<string, object?> records
-        // The definition needs to specify the key property, vector property, and data properties
-        // Based on the actual database schema, the key column is "key" and there are additional columns
-        return new VectorStoreCollectionDefinition
-        {
-            Properties =
-            [
-                // Key property - VectorStoreWriter<string> uses "key" as the column name
-                // Key properties must be one of: int, long, string, Guid
-                new VectorStoreKeyProperty("key", typeof(string)),
-                // Vector property - stores the embedding vector (stored in vec_data virtual table as "embedding")
-                new VectorStoreVectorProperty("embedding", typeof(ReadOnlyMemory<float>), dimensions: embeddingDimension),
-                // Data properties - match the actual schema columns
-                new VectorStoreDataProperty("content", typeof(string)),
-                new VectorStoreDataProperty("context", typeof(string)),
-                new VectorStoreDataProperty("documentid", typeof(string))
-            ]
-        };
-    }
-
-    private string BuildSystemPrompt(string context)
-    {
-        return $"""
-                You are SourceChat, an AI assistant that helps developers understand their codebase.
-
-                You have access to the following relevant code snippets and documentation from the codebase:
-
-                {context}
-
-                Instructions:
-                - Answer questions based on the provided code context
-                - Be specific and reference actual code when possible
-                - If you're unsure or the context doesn't contain relevant information, say so
-                - Provide file paths and line references when available
-                - Explain technical concepts clearly
-                - For follow-up questions, consider the conversation history
-
-                Answer the user's question clearly and concisely.
-                """;
     }
 }
