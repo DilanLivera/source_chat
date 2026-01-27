@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DataIngestion;
@@ -138,7 +139,31 @@ internal sealed class IngestionService
                 {
                     _logger.LogError(result.Exception, "Error while processing file: {FilePath}", result.Exception.Message);
 
-                    return Result<IngestionResult>.Failure(IngestionErrors.FileProcessingError(result.Exception.Message));
+                    // Check for dimension mismatch error
+                    if (result.Exception is not VectorStoreException { InnerException: SqliteException sqliteEx } ||
+                        !sqliteEx.Message.Contains("Dimension mismatch", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return Result<IngestionResult>.Failure(IngestionErrors.FileProcessingError(result.Exception.Message));
+                    }
+
+                    // Extract dimension information from error message
+                    // Format: "Dimension mismatch for inserted vector for the "embedding" column. Expected 4096 dimensions but received 384."
+                    string errorMessage = sqliteEx.Message;
+                    int actualDimension = embeddingDimension;
+
+                    // Try to extract expected dimension from error message
+                    Match match = Regex.Match(input: errorMessage,
+                                              pattern: @"Expected (\d+) dimensions but received (\d+)");
+                    if (!match.Success)
+                    {
+                        return Result<IngestionResult>.Failure(IngestionErrors.DimensionMismatch("unknown", actualDimension));
+                    }
+
+                    string expectedDimension = match.Groups[1].Value;
+                    actualDimension = int.Parse(match.Groups[2].Value);
+
+                    return Result<IngestionResult>.Failure(IngestionErrors.DimensionMismatch(expectedDimension, actualDimension));
+
                 }
 
                 if (!result.Succeeded)

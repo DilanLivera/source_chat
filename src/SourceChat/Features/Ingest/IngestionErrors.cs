@@ -27,4 +27,15 @@ internal static class IngestionErrors
 
     public static Error SummaryRetrievalError(string exceptionMessage) =>
         Error.Failure(code: "SummaryRetrievalError", message: $"Failed to retrieve ingestion summary: {exceptionMessage}");
+
+    public static Error DimensionMismatch(string expectedDimension, int actualDimension)
+    {
+        string message = $"""
+                            Embedding dimension mismatch: The vector store expects '{expectedDimension}' dimensions, but the current embedding model produces '{actualDimension}' dimensions.
+                            This usually happens when switching between different embedding models.
+                            Please run 'clear' command to delete the existing database and try again.
+                          """;
+
+        return Error.Failure(code: "DimensionMismatch", message: message);
+    }
 }
