@@ -45,6 +45,7 @@ internal class ConfigurationService
         // Return dimension based on model
         return embeddingModel.ToLowerInvariant() switch
         {
+            "Cohere-embed-v3-english" => 1024,
             "text-embedding-3-small" => 1536,
             "text-embedding-3-large" => 3072,
             "text-embedding-ada-002" => 1536,

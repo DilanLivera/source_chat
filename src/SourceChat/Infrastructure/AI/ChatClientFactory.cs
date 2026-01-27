@@ -1,5 +1,6 @@
 using System.ClientModel;
-using System.ClientModel.Primitives;
+using Azure;
+using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using OllamaSharp;
@@ -50,25 +51,16 @@ internal sealed class ChatClientFactory
 
     private IChatClient CreateAzureOpenAIChatClient()
     {
-        ClientLoggingOptions clientLoggingOptions = new()
-        {
-            EnableLogging = true
-        };
-        OpenAIClientOptions openAiClientOptions = new()
-        {
-            Endpoint = new Uri(_config.AzureOpenAiEndpoint),
-            ClientLoggingOptions = clientLoggingOptions,
-        };
-
         if (string.IsNullOrWhiteSpace(_config.AzureOpenAiApiKey))
         {
             throw new InvalidOperationException("AZURE_OPENAI_API_KEY must be set for AzureOpenAI provider");
         }
 
-        ApiKeyCredential apiKeyCredential = new(_config.AzureOpenAiApiKey);
-        OpenAIClient openAiClient = new(apiKeyCredential, openAiClientOptions);
-        return openAiClient.GetChatClient(_config.AzureOpenAiChatDeployment)
-                           .AsIChatClient();
+        AzureOpenAIClient client = new(new Uri(_config.AzureOpenAiEndpoint),
+                                       new AzureKeyCredential(_config.AzureOpenAiApiKey));
+
+        return client.GetChatClient(_config.AzureOpenAiChatDeployment)
+                     .AsIChatClient();
     }
 
     private IChatClient CreateOllamaChatClient()
