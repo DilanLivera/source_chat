@@ -64,20 +64,21 @@ public class IngestionServiceUnitTests : IDisposable
         IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, chatClientFactory, changeDetector, loggerFactory, reader);
 
         // Act: This is where you can set a breakpoint!
-        IngestionResult result = await ingestionService.IngestDirectoryAsync(
+        Result<IngestionResult> result = await ingestionService.IngestDirectoryAsync(
             _testDirectory,
             "*.md;*.cs",
             ChunkingStrategy.Section,
             incremental: false);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.True(result.FilesProcessed >= 0, "Files processed should be non-negative");
-        Assert.True(result.Errors >= 0, "Errors should be non-negative");
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.True(result.Value.FilesProcessed >= 0, "Files processed should be non-negative");
+        Assert.True(result.Value.Errors >= 0, "Errors should be non-negative");
 
-        Console.WriteLine($"Files Processed: {result.FilesProcessed}");
-        Console.WriteLine($"Total Chunks: {result.TotalChunks}");
-        Console.WriteLine($"Errors: {result.Errors}");
+        Console.WriteLine($"Files Processed: {result.Value.FilesProcessed}");
+        Console.WriteLine($"Total Chunks: {result.Value.TotalChunks}");
+        Console.WriteLine($"Errors: {result.Value.Errors}");
     }
 
     [Fact]
@@ -107,16 +108,17 @@ public class IngestionServiceUnitTests : IDisposable
         IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, chatClientFactory, changeDetector, loggerFactory, reader);
 
         // Act: Only process .md files - set breakpoint here to debug!
-        IngestionResult result = await ingestionService.IngestDirectoryAsync(
+        Result<IngestionResult> result = await ingestionService.IngestDirectoryAsync(
             _testDirectory,
             "*.md",  // Only markdown files
             ChunkingStrategy.Section,
             incremental: false);
 
         // Assert
-        Assert.NotNull(result);
-        Console.WriteLine($"Files Processed: {result.FilesProcessed}");
-        Console.WriteLine($"Errors: {result.Errors}");
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Console.WriteLine($"Files Processed: {result.Value.FilesProcessed}");
+        Console.WriteLine($"Errors: {result.Value.Errors}");
     }
 
     [Fact]
@@ -138,16 +140,17 @@ public class IngestionServiceUnitTests : IDisposable
         IngestionService ingestionService = new(config, vectorStoreProvider, embeddingFactory, chatClientFactory, changeDetector, loggerFactory, reader);
 
         // Act: Set breakpoint here!
-        IngestionResult result = await ingestionService.IngestDirectoryAsync(
+        Result<IngestionResult> result = await ingestionService.IngestDirectoryAsync(
             _testDirectory,
             "*.md",
             ChunkingStrategy.Section,
             incremental: false);
 
         // Assert
-        Assert.NotNull(result);
-        Assert.Equal(0, result.FilesProcessed);
-        Assert.Equal(0, result.Errors);
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Equal(0, result.Value.FilesProcessed);
+        Assert.Equal(0, result.Value.Errors);
     }
 
     public void Dispose()

@@ -90,16 +90,17 @@ public class IngestionAndQueryFunctionalTests : IDisposable
         QueryService queryService = new(config, vectorStoreProvider, loggerFactory.CreateLogger<QueryService>());
 
         // Act - Ingestion
-        IngestionResult ingestionResult = await ingestionService.IngestDirectoryAsync(
+        Result<IngestionResult> ingestionResult = await ingestionService.IngestDirectoryAsync(
             _testDirectory,
             "*.md",
             ChunkingStrategy.Section,
             incremental: false);
 
         // Assert - Ingestion succeeded
-        Assert.NotNull(ingestionResult);
-        Assert.True(ingestionResult.FilesProcessed > 0, "At least one file should be processed");
-        Assert.Equal(0, ingestionResult.Errors);
+        Assert.True(ingestionResult.IsSuccess);
+        Assert.NotNull(ingestionResult.Value);
+        Assert.True(ingestionResult.Value.FilesProcessed > 0, "At least one file should be processed");
+        Assert.Equal(0, ingestionResult.Value.Errors);
 
         // Act - Query with question that should match the test content
         string queryResult = await queryService.QueryAsync("What is SourceChat?", maxResults: 5);
@@ -119,7 +120,7 @@ public class IngestionAndQueryFunctionalTests : IDisposable
             queryResult.Contains("SourceChat", StringComparison.OrdinalIgnoreCase),
             $"Query result should contain relevant information. Result: {queryResult}");
 
-        Console.WriteLine($"Ingestion - Files Processed: {ingestionResult.FilesProcessed}, Errors: {ingestionResult.Errors}");
+        Console.WriteLine($"Ingestion - Files Processed: {ingestionResult.Value.FilesProcessed}, Errors: {ingestionResult.Value.Errors}");
         Console.WriteLine($"Query Result: {queryResult}");
     }
 

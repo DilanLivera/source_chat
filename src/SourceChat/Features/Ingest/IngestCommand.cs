@@ -57,67 +57,58 @@ internal static class IngestCommand
             string patterns = result.GetRequiredValue(patternsOption);
             bool incremental = result.GetRequiredValue(incrementalOption);
 
-            try
+            config.Validate();
+
+            if (!Directory.Exists(path))
             {
-                config.Validate();
-
-                if (!Directory.Exists(path))
-                {
-                    Console.WriteLine($"Error: Directory not found: {path}");
-                    Environment.ExitCode = 1;
-                    return;
-                }
-
-                Console.WriteLine($"Ingesting files from: {path}");
-                Console.WriteLine($"Strategy: {strategy}");
-                Console.WriteLine($"Patterns: {patterns}");
-                Console.WriteLine($"Incremental: {incremental}");
-                Console.WriteLine();
-
-                IngestionService ingestionService = serviceProvider.GetRequiredService<IngestionService>();
-
-                IngestionResult ingestionResult = await ingestionService.IngestDirectoryAsync(path,
-                                                                                              patterns,
-                                                                                              strategy,
-                                                                                              incremental);
-
-                if (ingestionResult.Errors > 0)
-                {
-                    Console.WriteLine($"\n⚠ Completed with {ingestionResult.Errors} error(s)");
-                    Environment.ExitCode = 1;
-
-                    return;
-                }
-
-                if (ingestionResult.FilesProcessed <= 0)
-                {
-                    Console.WriteLine("No files were processed.");
-                    return;
-                }
-
-                Console.WriteLine("\n=== Ingestion Summary ===");
-
-                if (ingestionResult.SummaryChunks.Count <= 0)
-                {
-                    Console.WriteLine("No summary content available.");
-
-                    return;
-                }
-
-                Console.WriteLine("\nSample content from ingested documents:\n");
-
-                foreach (SummaryChunk chunk in ingestionResult.SummaryChunks)
-                {
-                    Console.WriteLine($"Score: {chunk.Score:F4}");
-                    Console.WriteLine($"\tContent: {chunk.Content}");
-                    Console.WriteLine();
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Ingestion failed");
-                Console.WriteLine($"Fatal error: {ex.Message}");
+                Console.WriteLine($"Error: Directory not found: {path}");
                 Environment.ExitCode = 1;
+                return;
+            }
+
+            Console.WriteLine($"Ingesting files from: {path}");
+            Console.WriteLine($"Strategy: {strategy}");
+            Console.WriteLine($"Patterns: {patterns}");
+            Console.WriteLine($"Incremental: {incremental}");
+            Console.WriteLine();
+
+            IngestionService ingestionService = serviceProvider.GetRequiredService<IngestionService>();
+            Result<IngestionResult> ingestionResult = await ingestionService.IngestDirectoryAsync(path,
+                                                                                                  patterns,
+                                                                                                  strategy,
+                                                                                                  incremental);
+
+            if (ingestionResult.IsFailure)
+            {
+                logger.LogError("Ingestion failed: {Error}", ingestionResult.Error);
+                Console.WriteLine($"\nError: {ingestionResult.Error.Message}");
+                Environment.ExitCode = 1;
+                return;
+            }
+
+            IngestionResult data = ingestionResult.Value;
+
+            if (data.FilesProcessed <= 0)
+            {
+                Console.WriteLine("No files were processed.");
+                return;
+            }
+
+            Console.WriteLine("\n=== Ingestion Summary ===");
+
+            if (data.SummaryChunks.Count <= 0)
+            {
+                Console.WriteLine("No summary content available.");
+                return;
+            }
+
+            Console.WriteLine("\nSample content from ingested documents:\n");
+
+            foreach (SummaryChunk chunk in data.SummaryChunks)
+            {
+                Console.WriteLine($"Score: {chunk.Score:F4}");
+                Console.WriteLine($"\tContent: {chunk.Content}");
+                Console.WriteLine();
             }
         });
 

@@ -47,16 +47,17 @@ internal sealed class IngestionService
         _chatClient = chatClientFactory.Create();
     }
 
-    public async Task<IngestionResult> IngestDirectoryAsync(string path,
-                                                            string patterns,
-                                                            ChunkingStrategy strategy,
-                                                            bool incremental)
+    public async Task<Result<IngestionResult>> IngestDirectoryAsync(string path,
+                                                                    string patterns,
+                                                                    ChunkingStrategy strategy,
+                                                                    bool incremental)
     {
         if (!Directory.Exists(path))
         {
             _logger.LogError("Directory does not exist: {Path}", path);
 
-            throw new DirectoryNotFoundException($"Directory not found: {path}");
+            Error directoryNotFoundError = Error.Failure(code: "DirectoryNotFound", message: $"Directory not found: {path}");
+            return Result<IngestionResult>.Failure(directoryNotFoundError);
         }
 
         EnricherOptions enricherOptions = new(_chatClient)
@@ -112,139 +113,126 @@ internal sealed class IngestionService
         DirectoryInfo directory = new(path);
 
         int filesProcessed = 0;
-        int errors = 0;
 
+        _logger.LogInformation("Starting to process files from directory: {Path} with patterns: {Patterns}", path, patterns);
+
+        string[] patternArray = patterns.Split(';',
+                                               options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        List<string> matchingFiles = [];
+
+        foreach (string pattern in patternArray)
+        {
+            string[] files = Directory.GetFiles(path, pattern, SearchOption.AllDirectories);
+            matchingFiles.AddRange(files);
+        }
+
+        string matchingFilesString = string.Join(", ", matchingFiles.Select(Path.GetFileName));
+        _logger.LogInformation("Found {Count} files matching patterns: {Files}", matchingFiles.Count, matchingFilesString);
+
+        foreach (string pattern in patternArray)
+        {
+            IAsyncEnumerable<Microsoft.Extensions.DataIngestion.IngestionResult> results = pipeline.ProcessAsync(directory, searchPattern: pattern);
+
+            await foreach (Microsoft.Extensions.DataIngestion.IngestionResult result in results)
+            {
+                if (result.Exception is not null)
+                {
+                    _logger.LogError(result.Exception, "Error while processing file: {FilePath}", result.Exception.Message);
+
+                    Error fileProcessingError = Error.Failure(code: "FileProcessingError", message: $"Error while processing file: {result.Exception.Message}");
+                    return Result<IngestionResult>.Failure(fileProcessingError);
+                }
+
+                if (!result.Succeeded)
+                {
+                    _logger.LogWarning("Failed to process document: {DocumentId}", result.DocumentId);
+
+                    Error fileProcessingFailedError = Error.Failure(code: "FileProcessingFailed", message: $"Failed to process document: {result.DocumentId}");
+                    return Result<IngestionResult>.Failure(fileProcessingFailedError);
+                }
+
+                _logger.LogInformation("Completed processing '{DocumentId}'. Succeeded: '{Succeeded}'.", result.DocumentId, result.Succeeded);
+
+                // DocumentId might be a URI (file://) or a file path
+                string filePath = result.DocumentId;
+
+                // Handle URI format (file:///path/to/file)
+                if (filePath.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+                {
+                    Uri uri = new(filePath);
+                    filePath = uri.LocalPath;
+                }
+
+                // Ensure we have a full path (DocumentId might be relative)
+                if (!Path.IsPathRooted(filePath))
+                {
+                    filePath = Path.Combine(path, filePath);
+                }
+                filePath = Path.GetFullPath(filePath);
+
+                try
+                {
+                    FileInfo fileInfo = new(filePath);
+                    string hash = await _changeDetector.GetFileHashAsync(filePath);
+                    _changeDetector.UpdateFileTracking(filePath, fileInfo.LastWriteTime, hash);
+                    _logger.LogInformation("Tracked file: {FilePath} (Succeeded: {Succeeded})", filePath, result.Succeeded);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to track file: {FilePath}", filePath);
+
+                    Error fileTrackingError = Error.Failure("FileTrackingError", $"Failed to track file: {filePath}. {ex.Message}");
+                    return Result<IngestionResult>.Failure(fileTrackingError);
+                }
+
+                filesProcessed++;
+            }
+        }
+
+        _logger.LogInformation("Finished processing. Files processed: {FilesProcessed}", filesProcessed);
+
+        // Save tracking information to persist file tracking
         try
         {
-            _logger.LogInformation("Starting to process files from directory: {Path} with patterns: {Patterns}", path, patterns);
-
-            string[] patternArray = patterns.Split(';',
-                                                   options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            List<string> matchingFiles = [];
-
-            foreach (string pattern in patternArray)
-            {
-                string[] files = Directory.GetFiles(path, pattern, SearchOption.AllDirectories);
-                matchingFiles.AddRange(files);
-            }
-
-            string matchingFilesString = string.Join(", ", matchingFiles.Select(Path.GetFileName));
-            _logger.LogInformation("Found {Count} files matching patterns: {Files}", matchingFiles.Count, matchingFilesString);
-
-            int resultCount = 0;
-
-            foreach (string pattern in patternArray)
-            {
-                IAsyncEnumerable<Microsoft.Extensions.DataIngestion.IngestionResult> results = pipeline.ProcessAsync(directory, searchPattern: pattern);
-
-                await foreach (Microsoft.Extensions.DataIngestion.IngestionResult result in results)
-                {
-                    if (result.Exception is not null)
-                    {
-                        errors++;
-                        _logger.LogError(result.Exception, "Error while processing file: {FilePath}", result.Exception.Message);
-
-                        continue;
-                    }
-
-                    if (!result.Succeeded)
-                    {
-                        errors++;
-                        _logger.LogWarning("Failed to process document: {DocumentId}", result.DocumentId);
-
-                        continue;
-                    }
-
-                    resultCount++;
-                    _logger.LogInformation("Completed processing '{DocumentId}'. Succeeded: '{Succeeded}'.", result.DocumentId, result.Succeeded);
-
-                    // DocumentId might be a URI (file://) or a file path
-                    string filePath = result.DocumentId;
-
-                    // Handle URI format (file:///path/to/file)
-                    if (filePath.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
-                    {
-                        Uri uri = new(filePath);
-                        filePath = uri.LocalPath;
-                    }
-
-                    // Ensure we have a full path (DocumentId might be relative)
-                    if (!Path.IsPathRooted(filePath))
-                    {
-                        filePath = Path.Combine(path, filePath);
-                    }
-                    filePath = Path.GetFullPath(filePath);
-
-                    try
-                    {
-                        FileInfo fileInfo = new(filePath);
-                        string hash = await _changeDetector.GetFileHashAsync(filePath);
-                        _changeDetector.UpdateFileTracking(filePath, fileInfo.LastWriteTime, hash);
-                        _logger.LogInformation("Tracked file: {FilePath} (Succeeded: {Succeeded})", filePath, result.Succeeded);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(ex, "Failed to track file: {FilePath}", filePath);
-                    }
-
-                    filesProcessed++;
-                }
-            }
-
-            _logger.LogInformation("Finished processing. Results received: {ResultCount}, Files processed: {FilesProcessed}, Errors: {Errors}", resultCount, filesProcessed, errors);
+            _changeDetector.SaveTracking();
+            _logger.LogInformation("File tracking saved successfully");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Processing failed with exception: {Message}", ex.Message);
-            throw;
-        }
-        finally
-        {
-            // Save tracking information to persist file tracking
-            try
-            {
-                _changeDetector.SaveTracking();
-                _logger.LogInformation("File tracking saved successfully");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to save file tracking");
-            }
+            _logger.LogError(ex, "Failed to save file tracking");
+
+            Error fileTrackingSaveError = Error.Failure(code: "FileTrackingSaveError", message: $"Failed to save file tracking: {ex.Message}");
+            return Result<IngestionResult>.Failure(fileTrackingSaveError);
         }
 
         IngestionResult ingestionResult = new()
         {
             FilesProcessed = filesProcessed,
-            Errors = errors
+            Errors = 0
         };
 
-        if (errors != 0)
-        {
-            return ingestionResult;
-        }
+        List<SummaryChunk> summaryChunks = [];
+        VectorStoreCollection<object, Dictionary<string, object?>> collection = writer.VectorStoreCollection;
+
+        // Use semantic search to verify ingestion worked, following the example pattern
+        // Search with a generic query to get diverse sample content
+        const string searchQuery = "summary overview content";
+        _logger.LogInformation("Performing semantic search on collection 'data' with query: '{Query}', top: {Top}", searchQuery, TopResults);
 
         try
         {
-            List<SummaryChunk> summaryChunks = [];
-            VectorStoreCollection<object, Dictionary<string, object?>> collection = writer.VectorStoreCollection;
-
-            // Use semantic search to verify ingestion worked, following the example pattern
-            // Search with a generic query to get diverse sample content
-            string searchQuery = "summary overview content";
-            _logger.LogInformation("Performing semantic search on collection 'data' with query: '{Query}', top: {Top}", searchQuery, TopResults);
-
             await foreach (VectorSearchResult<Dictionary<string, object?>> result in collection.SearchAsync(searchQuery, top: TopResults))
             {
                 // Access content from the dictionary-like record, as shown in the example
                 if (!result.Record.TryGetValue("content", out object? contentObj) || contentObj is not string content)
                 {
-                    // todo: log
+                    _logger.LogWarning("Result record missing content field or content is not a string");
                     continue;
                 }
 
                 if (string.IsNullOrWhiteSpace(content))
                 {
-                    // todo: log
+                    _logger.LogWarning("Result content is null or whitespace");
                     continue;
                 }
 
@@ -265,13 +253,19 @@ internal sealed class IngestionService
         catch (VectorStoreException ex) when (ex.InnerException is SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 1)
         {
             // Collection doesn't exist (SQLite error 1: no such table/column)
-            _logger.LogInformation("Collection 'data' does not exist. No summary available.");
+            _logger.LogError("Collection 'data' does not exist. Ingestion may have failed.");
+
+            Error collectionNotFound = Error.Failure(code: "CollectionNotFound", message: "Collection 'data' does not exist. Ingestion may have failed.");
+            return Result<IngestionResult>.Failure(collectionNotFound);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to retrieve ingestion summary: {Message}", ex.Message);
+            _logger.LogError(ex, "Failed to retrieve ingestion summary: {Message}", ex.Message);
+
+            Error summaryRetrievalError = Error.Failure(code: "SummaryRetrievalError", message: $"Failed to retrieve ingestion summary: {ex.Message}");
+            return Result<IngestionResult>.Failure(summaryRetrievalError);
         }
 
-        return ingestionResult;
+        return Result<IngestionResult>.Success(ingestionResult);
     }
 }
