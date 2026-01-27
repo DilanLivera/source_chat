@@ -56,8 +56,7 @@ internal sealed class IngestionService
         {
             _logger.LogError("Directory does not exist: {Path}", path);
 
-            Error directoryNotFoundError = Error.Failure(code: "DirectoryNotFound", message: $"Directory not found: {path}");
-            return Result<IngestionResult>.Failure(directoryNotFoundError);
+            return Result<IngestionResult>.Failure(IngestionErrors.DirectoryNotFound(path));
         }
 
         EnricherOptions enricherOptions = new(_chatClient)
@@ -139,16 +138,14 @@ internal sealed class IngestionService
                 {
                     _logger.LogError(result.Exception, "Error while processing file: {FilePath}", result.Exception.Message);
 
-                    Error fileProcessingError = Error.Failure(code: "FileProcessingError", message: $"Error while processing file: {result.Exception.Message}");
-                    return Result<IngestionResult>.Failure(fileProcessingError);
+                    return Result<IngestionResult>.Failure(IngestionErrors.FileProcessingError(result.Exception.Message));
                 }
 
                 if (!result.Succeeded)
                 {
                     _logger.LogWarning("Failed to process document: {DocumentId}", result.DocumentId);
 
-                    Error fileProcessingFailedError = Error.Failure(code: "FileProcessingFailed", message: $"Failed to process document: {result.DocumentId}");
-                    return Result<IngestionResult>.Failure(fileProcessingFailedError);
+                    return Result<IngestionResult>.Failure(IngestionErrors.FileProcessingFailed(result.DocumentId));
                 }
 
                 _logger.LogInformation("Completed processing '{DocumentId}'. Succeeded: '{Succeeded}'.", result.DocumentId, result.Succeeded);
@@ -181,8 +178,7 @@ internal sealed class IngestionService
                 {
                     _logger.LogError(ex, "Failed to track file: {FilePath}", filePath);
 
-                    Error fileTrackingError = Error.Failure("FileTrackingError", $"Failed to track file: {filePath}. {ex.Message}");
-                    return Result<IngestionResult>.Failure(fileTrackingError);
+                    return Result<IngestionResult>.Failure(IngestionErrors.FileTrackingError(filePath, ex.Message));
                 }
 
                 filesProcessed++;
@@ -201,8 +197,7 @@ internal sealed class IngestionService
         {
             _logger.LogError(ex, "Failed to save file tracking");
 
-            Error fileTrackingSaveError = Error.Failure(code: "FileTrackingSaveError", message: $"Failed to save file tracking: {ex.Message}");
-            return Result<IngestionResult>.Failure(fileTrackingSaveError);
+            return Result<IngestionResult>.Failure(IngestionErrors.FileTrackingSaveError(ex.Message));
         }
 
         IngestionResult ingestionResult = new()
@@ -255,15 +250,13 @@ internal sealed class IngestionService
             // Collection doesn't exist (SQLite error 1: no such table/column)
             _logger.LogError("Collection 'data' does not exist. Ingestion may have failed.");
 
-            Error collectionNotFound = Error.Failure(code: "CollectionNotFound", message: "Collection 'data' does not exist. Ingestion may have failed.");
-            return Result<IngestionResult>.Failure(collectionNotFound);
+            return Result<IngestionResult>.Failure(IngestionErrors.CollectionNotFound());
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to retrieve ingestion summary: {Message}", ex.Message);
 
-            Error summaryRetrievalError = Error.Failure(code: "SummaryRetrievalError", message: $"Failed to retrieve ingestion summary: {ex.Message}");
-            return Result<IngestionResult>.Failure(summaryRetrievalError);
+            return Result<IngestionResult>.Failure(IngestionErrors.SummaryRetrievalError(ex.Message));
         }
 
         return Result<IngestionResult>.Success(ingestionResult);
