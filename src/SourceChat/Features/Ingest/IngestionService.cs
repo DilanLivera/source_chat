@@ -88,7 +88,7 @@ internal sealed class IngestionService
             _ => throw new ArgumentException($"Unknown chunking strategy: {strategy}")
         };
 
-        int embeddingDimension = GetEmbeddingDimension();
+        int embeddingDimension = _config.GetEmbeddingDimension();
 
         using VectorStoreWriter<string> writer = new(_vectorStore,
                                                      dimensionCount: embeddingDimension,
@@ -274,28 +274,4 @@ internal sealed class IngestionService
 
         return ingestionResult;
     }
-
-    private int GetEmbeddingDimension()
-    {
-        string provider = _config.AiProvider.ToLowerInvariant();
-        string embeddingModel = provider switch
-        {
-            "openai" => _config.OpenAiEmbeddingModel,
-            "azureopenai" => _config.AzureOpenAiEmbeddingDeployment,
-            "ollama" => _config.OllamaEmbeddingModel,
-            _ => "text-embedding-3-small"
-        };
-
-        // Return dimension based on model
-        return embeddingModel.ToLowerInvariant() switch
-        {
-            "text-embedding-3-small" => 1536,
-            "text-embedding-3-large" => 3072,
-            "text-embedding-ada-002" => 1536,
-            "all-minilm" => 384, // Ollama's all-minilm model
-            "qwen3-embedding" => 4096, // Qwen3 embedding model has 4096 dimensions
-            _ => 1536 // Default fallback
-        };
-    }
-
 }

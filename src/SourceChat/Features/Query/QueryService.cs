@@ -41,7 +41,7 @@ internal sealed class QueryService
             try
             {
                 // GetDynamicCollection requires a definition with key property, vector property, and data properties
-                int embeddingDimension = GetEmbeddingDimension();
+                int embeddingDimension = _config.GetEmbeddingDimension();
                 VectorStoreCollectionDefinition definition = CreateCollectionDefinition(embeddingDimension);
                 collection = _vectorStore.GetDynamicCollection(name: "data", definition);
             }
@@ -223,29 +223,6 @@ internal sealed class QueryService
                 new VectorStoreDataProperty("context", typeof(string)),
                 new VectorStoreDataProperty("documentid", typeof(string))
             ]
-        };
-    }
-
-    private int GetEmbeddingDimension()
-    {
-        string provider = _config.AiProvider.ToLowerInvariant();
-        string embeddingModel = provider switch
-        {
-            "openai" => _config.OpenAiEmbeddingModel,
-            "azureopenai" => _config.AzureOpenAiEmbeddingDeployment,
-            "ollama" => _config.OllamaEmbeddingModel,
-            _ => "text-embedding-3-small"
-        };
-
-        // Return dimension based on model
-        return embeddingModel.ToLowerInvariant() switch
-        {
-            "text-embedding-3-small" => 1536,
-            "text-embedding-3-large" => 3072,
-            "text-embedding-ada-002" => 1536,
-            "all-minilm" => 384, // Ollama's all-minilm model
-            "qwen3-embedding" => 4096, // Qwen3 embedding model has 4096 dimensions
-            _ => 1536 // Default fallback
         };
     }
 

@@ -31,6 +31,29 @@ internal class ConfigurationService
     public int MaxTokensPerChunk => int.Parse(GetEnvVar("MAX_TOKENS_PER_CHUNK", "2000"));
     public int ChunkOverlapTokens => int.Parse(GetEnvVar("CHUNK_OVERLAP_TOKENS", "200"));
 
+    public int GetEmbeddingDimension()
+    {
+        string provider = AiProvider.ToLowerInvariant();
+        string embeddingModel = provider switch
+        {
+            "openai" => OpenAiEmbeddingModel,
+            "azureopenai" => AzureOpenAiEmbeddingDeployment,
+            "ollama" => OllamaEmbeddingModel,
+            _ => "text-embedding-3-small"
+        };
+
+        // Return dimension based on model
+        return embeddingModel.ToLowerInvariant() switch
+        {
+            "text-embedding-3-small" => 1536,
+            "text-embedding-3-large" => 3072,
+            "text-embedding-ada-002" => 1536,
+            "all-minilm" => 384, // Ollama's all-minilm model
+            "qwen3-embedding" => 4096, // Qwen3 embedding model has 4096 dimensions
+            _ => 1536 // Default fallback
+        };
+    }
+
     private string GetEnvVar(string key, string defaultValue)
     {
         string? value = Environment.GetEnvironmentVariable(key);
