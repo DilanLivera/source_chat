@@ -11,7 +11,9 @@ using Microsoft.SemanticKernel.Connectors.SqliteVec;
 using OllamaSharp;
 using OpenAI;
 using SourceChat.Features.Shared;
+using SourceChat.Infrastructure.AI;
 using SourceChat.Infrastructure.Configuration;
+using SourceChat.Infrastructure.FileSystem;
 using SourceChat.Infrastructure.Storage;
 using IngestionResult = SourceChat.Features.Shared.IngestionResult;
 

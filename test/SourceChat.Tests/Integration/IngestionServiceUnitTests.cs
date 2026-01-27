@@ -2,7 +2,9 @@ using Microsoft.Extensions.DataIngestion;
 using Microsoft.Extensions.Logging;
 using SourceChat.Features.Ingest;
 using SourceChat.Features.Shared;
+using SourceChat.Infrastructure.AI;
 using SourceChat.Infrastructure.Configuration;
+using SourceChat.Infrastructure.FileSystem;
 using SourceChat.Infrastructure.Storage;
 using IngestionResult = SourceChat.Features.Shared.IngestionResult;
 

@@ -3,7 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SourceChat.Features.Ingest;
 using SourceChat.Features.Query;
+using SourceChat.Infrastructure.AI;
 using SourceChat.Infrastructure.Configuration;
+using SourceChat.Infrastructure.FileSystem;
 using SourceChat.Infrastructure.Storage;
 
 namespace SourceChat;

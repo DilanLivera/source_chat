@@ -6,7 +6,7 @@ using OllamaSharp;
 using OpenAI;
 using SourceChat.Infrastructure.Configuration;
 
-namespace SourceChat.Infrastructure.Storage;
+namespace SourceChat.Infrastructure.AI;
 
 // https://learn.microsoft.com/en-us/dotnet/ai/iembeddinggenerator
 internal sealed class EmbeddingGeneratorFactory

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel.Connectors.SqliteVec;
+using SourceChat.Infrastructure.AI;
 using SourceChat.Infrastructure.Configuration;
 
 namespace SourceChat.Infrastructure.Storage;

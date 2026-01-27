@@ -3,9 +3,9 @@ using System.Text.Json;
 using SourceChat.Features.Shared;
 using SourceChat.Infrastructure.Configuration;
 
-namespace SourceChat.Infrastructure.Storage;
+namespace SourceChat.Infrastructure.FileSystem;
 
-internal class FileChangeDetector
+internal sealed class FileChangeDetector
 {
     private readonly string _trackingFilePath;
     private readonly Dictionary<string, FileTrackingInfo> _fileTracking;

@@ -2,7 +2,7 @@ using System.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SourceChat.Infrastructure.Configuration;
-using SourceChat.Infrastructure.Storage;
+using SourceChat.Infrastructure.FileSystem;
 
 namespace SourceChat.Features.List;
 
