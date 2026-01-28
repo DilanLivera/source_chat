@@ -103,25 +103,26 @@ public class IngestionAndQueryFunctionalTests : IDisposable
         Assert.Equal(0, ingestionResult.Value.Errors);
 
         // Act - Query with question that should match the test content
-        string queryResult = await queryService.QueryAsync("What is SourceChat?", maxResults: 5);
+        Result<string> queryResponse = await queryService.QueryAsync("What is SourceChat?", maxResults: 5);
 
         // Assert - Query returned relevant results
-        Assert.NotNull(queryResult);
-        Assert.NotEmpty(queryResult);
-        Assert.DoesNotContain("No data has been ingested yet", queryResult);
-        Assert.DoesNotContain("I couldn't find any relevant information", queryResult);
+        Assert.True(queryResponse.IsSuccess);
+        Assert.NotNull(queryResponse.Value);
+        Assert.NotEmpty(queryResponse.Value);
+        Assert.DoesNotContain("No data has been ingested yet", queryResponse.Value);
+        Assert.DoesNotContain("I couldn't find any relevant information", queryResponse.Value);
 
         // Verify the response contains expected keywords from the test file
         // The response should mention .NET, RAG, or similar concepts from the test document
         Assert.True(
-            queryResult.Contains(".NET", StringComparison.OrdinalIgnoreCase) ||
-            queryResult.Contains("RAG", StringComparison.OrdinalIgnoreCase) ||
-            queryResult.Contains("Retrieval", StringComparison.OrdinalIgnoreCase) ||
-            queryResult.Contains("SourceChat", StringComparison.OrdinalIgnoreCase),
-            $"Query result should contain relevant information. Result: {queryResult}");
+            queryResponse.Value.Contains(".NET", StringComparison.OrdinalIgnoreCase) ||
+            queryResponse.Value.Contains("RAG", StringComparison.OrdinalIgnoreCase) ||
+            queryResponse.Value.Contains("Retrieval", StringComparison.OrdinalIgnoreCase) ||
+            queryResponse.Value.Contains("SourceChat", StringComparison.OrdinalIgnoreCase),
+            $"Query result should contain relevant information. Result: {queryResponse.Value}");
 
         Console.WriteLine($"Ingestion - Files Processed: {ingestionResult.Value.FilesProcessed}, Errors: {ingestionResult.Value.Errors}");
-        Console.WriteLine($"Query Result: {queryResult}");
+        Console.WriteLine($"Query Result: {queryResponse.Value}");
     }
 
     [Fact]
@@ -140,12 +141,12 @@ public class IngestionAndQueryFunctionalTests : IDisposable
         VectorStoreProvider vectorStoreProvider = new(embeddingFactory, config, loggerFactory.CreateLogger<VectorStoreProvider>());
         QueryService queryService = new(chatClientFactory, config, vectorStoreProvider, loggerFactory.CreateLogger<QueryService>());
 
-        // Act & Assert: Query without any ingestion should throw an exception
-        // The collection doesn't exist, so GetDynamicCollection succeeds but SearchAsync fails
-        await Assert.ThrowsAsync<Microsoft.Extensions.VectorData.VectorStoreException>(
-            async () => await queryService.QueryAsync("What is SourceChat?", maxResults: 5));
+        // Act & Assert: Query without any ingestion should return a failure result
+        Result<string> queryResponse = await queryService.QueryAsync("What is SourceChat?", maxResults: 5);
+        Assert.True(queryResponse.IsFailure);
+        Assert.Equal(QueryErrors.CollectionNotFound().Message, queryResponse.Error.Message);
 
-        Console.WriteLine("Query correctly threw exception when no data was ingested");
+        Console.WriteLine("Query correctly returned failure when no data was ingested");
     }
 
     public void Dispose()

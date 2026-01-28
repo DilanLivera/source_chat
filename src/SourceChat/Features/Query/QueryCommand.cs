@@ -1,6 +1,7 @@
 using System.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using SourceChat.Features.Shared;
 using SourceChat.Infrastructure.Configuration;
 
 namespace SourceChat.Features.Query;
@@ -48,27 +49,28 @@ internal static class QueryCommand
             int maxResults = result.GetRequiredValue(maxResultsOption);
             bool interactive = result.GetRequiredValue(interactiveOption);
 
-            try
+            config.Validate();
+
+            QueryService queryService = serviceProvider.GetRequiredService<QueryService>();
+
+            if (string.IsNullOrWhiteSpace(question) || interactive)
             {
-                config.Validate();
-
-                QueryService queryService = serviceProvider.GetRequiredService<QueryService>();
-
-                if (string.IsNullOrWhiteSpace(question) || interactive)
-                {
-                    await queryService.RunInteractiveQueryAsync();
-                }
-                else
-                {
-                    Console.WriteLine($"Question: {question}\n");
-                    string answer = await queryService.QueryAsync(question, maxResults);
-                    Console.WriteLine($"Answer: {answer}");
-                }
+                await queryService.RunInteractiveQueryAsync();
             }
-            catch (Exception ex)
+            else
             {
-                Console.WriteLine($"Error: {ex.Message}");
-                logger.LogError(ex, "Query failed");
+                Console.WriteLine($"Question: {question}\n");
+                Result<string> queryResult = await queryService.QueryAsync(question, maxResults);
+
+                if (queryResult.IsFailure)
+                {
+                    logger.LogError("Query failed: {Error}", queryResult.Error);
+                    Console.WriteLine($"\nError: {queryResult.Error.Message}");
+                    Environment.ExitCode = 1;
+                    return;
+                }
+
+                Console.WriteLine($"Answer: {queryResult.Value}");
             }
         });
 
