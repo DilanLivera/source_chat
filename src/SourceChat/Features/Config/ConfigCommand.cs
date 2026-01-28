@@ -9,15 +9,8 @@ internal static class ConfigCommand
 {
     public static Command Create(Option<LogLevel> logLevelOption)
     {
-        Option<bool> showOption = new(name: "--show")
-        {
-            Description = "Display configuration",
-            DefaultValueFactory = result => true
-        };
-
         Command command = new(name: "config", description: "Show current configuration");
 
-        command.Add(showOption);
         command.Add(logLevelOption);
 
         command.SetAction(async result =>
