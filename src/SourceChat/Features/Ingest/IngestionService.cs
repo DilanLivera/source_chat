@@ -60,13 +60,6 @@ internal sealed class IngestionService
             return Result<IngestionResult>.Failure(IngestionErrors.DirectoryNotFound(path));
         }
 
-        EnricherOptions enricherOptions = new(_chatClient)
-        {
-            LoggerFactory = _loggerFactory
-        };
-        IngestionDocumentProcessor imageAlternativeTextEnricher = new ImageAlternativeTextEnricher(enricherOptions);
-        IngestionChunkProcessor<string> summaryEnricher = new SummaryEnricher(enricherOptions);
-
         string tokenizerModel = _config.AiProvider.ToLowerInvariant() switch
         {
             "openai" => _config.OpenAiChatModel,
@@ -107,17 +100,23 @@ internal sealed class IngestionService
                                                        },
                                                        _loggerFactory);
 
+
+
+        EnricherOptions enricherOptions = new(_chatClient)
+        {
+            LoggerFactory = _loggerFactory
+        };
+        IngestionDocumentProcessor imageAlternativeTextEnricher = new ImageAlternativeTextEnricher(enricherOptions);
+        IngestionChunkProcessor<string> summaryEnricher = new SummaryEnricher(enricherOptions);
         pipeline.DocumentProcessors.Add(imageAlternativeTextEnricher);
         pipeline.ChunkProcessors.Add(summaryEnricher);
 
         DirectoryInfo directory = new(path);
-
         int filesProcessed = 0;
 
         _logger.LogInformation("Starting to process files from directory: {Path} with patterns: {Patterns}", path, patterns);
 
-        string[] patternArray = patterns.Split(';',
-                                               options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        string[] patternArray = patterns.Split(';', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         List<string> matchingFiles = [];
 
         foreach (string pattern in patternArray)
@@ -137,7 +136,7 @@ internal sealed class IngestionService
             {
                 if (result.Exception is not null)
                 {
-                    _logger.LogError(result.Exception, "Error while processing file: {FilePath}", result.Exception.Message);
+                    _logger.LogError(result.Exception, "Error while processing file: {DocumentId}", result.DocumentId);
 
                     // Check for dimension mismatch error
                     if (result.Exception is not VectorStoreException { InnerException: SqliteException sqliteEx } ||
@@ -173,7 +172,7 @@ internal sealed class IngestionService
                     return Result<IngestionResult>.Failure(IngestionErrors.FileProcessingFailed(result.DocumentId));
                 }
 
-                _logger.LogInformation("Completed processing '{DocumentId}'. Succeeded: '{Succeeded}'.", result.DocumentId, result.Succeeded);
+                _logger.LogInformation("Successfully completed processing '{DocumentId}'", result.DocumentId);
 
                 // DocumentId might be a URI (file://) or a file path
                 string filePath = result.DocumentId;
@@ -197,7 +196,7 @@ internal sealed class IngestionService
                     FileInfo fileInfo = new(filePath);
                     string hash = await _changeDetector.GetFileHashAsync(filePath);
                     _changeDetector.UpdateFileTracking(filePath, fileInfo.LastWriteTime, hash);
-                    _logger.LogInformation("Tracked file: {FilePath} (Succeeded: {Succeeded})", filePath, result.Succeeded);
+                    _logger.LogInformation("Tracked file: {FilePath}", filePath);
                 }
                 catch (Exception ex)
                 {
@@ -270,7 +269,7 @@ internal sealed class IngestionService
 
             _logger.LogInformation("Retrieved {Count} summary chunks from vector store using semantic search", summaryChunks.Count);
         }
-        catch (VectorStoreException ex) when (ex.InnerException is SqliteException sqliteEx && sqliteEx.SqliteErrorCode == 1)
+        catch (VectorStoreException ex) when (ex.InnerException is SqliteException { SqliteErrorCode: 1 })
         {
             // Collection doesn't exist (SQLite error 1: no such table/column)
             _logger.LogError("Collection 'data' does not exist. Ingestion may have failed.");
