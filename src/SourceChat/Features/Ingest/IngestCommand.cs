@@ -46,7 +46,7 @@ internal static class IngestCommand
         {
             LogLevel logLevel = result.GetValue(logLevelOption);
 
-            ServiceCollection collection = ServiceCollectionFactory.Create(logLevel);
+            ServiceCollection collection = ServiceRegistration.RegisterServices(logLevel);
             await using ServiceProvider serviceProvider = collection.BuildServiceProvider();
 
             ILogger logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(nameof(IngestCommand));

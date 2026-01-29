@@ -11,16 +11,16 @@ using SourceChat.Infrastructure.Storage;
 namespace SourceChat;
 
 /// <summary>
-/// Factory for creating and configuring service collections for SourceChat.
+/// Provides service registration functionality for SourceChat.
 /// </summary>
-internal static class ServiceCollectionFactory
+internal static class ServiceRegistration
 {
     /// <summary>
-    /// Creates a new service collection with all SourceChat services registered.
+    /// Registers all SourceChat services in a new service collection.
     /// </summary>
     /// <param name="minimumLogLevel">The minimum log level for logging configuration.</param>
     /// <returns>A configured service collection ready to build a service provider.</returns>
-    public static ServiceCollection Create(LogLevel minimumLogLevel)
+    public static ServiceCollection RegisterServices(LogLevel minimumLogLevel)
     {
         ServiceCollection services = new();
 
