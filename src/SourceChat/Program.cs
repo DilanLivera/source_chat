@@ -12,7 +12,7 @@ Env.Load();
 Option<LogLevel> logLevelOption = new(name: "--log-level")
 {
     Description = "Set the logging level",
-    DefaultValueFactory = _ => LogLevel.Warning
+    DefaultValueFactory = _ => LogLevel.None
 };
 
 RootCommand rootCommand = new(description: "SourceChat - AI-Powered Code Documentation Assistant");
