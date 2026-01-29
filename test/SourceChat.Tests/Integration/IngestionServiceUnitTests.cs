@@ -6,18 +6,21 @@ using SourceChat.Infrastructure.AI;
 using SourceChat.Infrastructure.Configuration;
 using SourceChat.Infrastructure.FileSystem;
 using SourceChat.Infrastructure.Storage;
+using Xunit.Abstractions;
 using IngestionResult = SourceChat.Features.Shared.IngestionResult;
 
 namespace SourceChat.Tests.Integration;
 
 public class IngestionServiceUnitTests : IDisposable
 {
+    private readonly ITestOutputHelper _testOutputHelper;
     private readonly string _testDirectory;
     private readonly string _testDbPath;
     private readonly Dictionary<string, string?> _originalEnvVars;
 
-    public IngestionServiceUnitTests()
+    public IngestionServiceUnitTests(ITestOutputHelper testOutputHelper)
     {
+        _testOutputHelper = testOutputHelper;
         _testDirectory = Path.Combine(Path.GetTempPath(), $"SourceChatUnitTest_{Guid.NewGuid()}");
         Directory.CreateDirectory(_testDirectory);
 
@@ -76,9 +79,9 @@ public class IngestionServiceUnitTests : IDisposable
         Assert.True(result.Value.FilesProcessed >= 0, "Files processed should be non-negative");
         Assert.True(result.Value.Errors >= 0, "Errors should be non-negative");
 
-        Console.WriteLine($"Files Processed: {result.Value.FilesProcessed}");
-        Console.WriteLine($"Total Chunks: {result.Value.TotalChunks}");
-        Console.WriteLine($"Errors: {result.Value.Errors}");
+        _testOutputHelper.WriteLine($"Files Processed: {result.Value.FilesProcessed}");
+        _testOutputHelper.WriteLine($"Total Chunks: {result.Value.TotalChunks}");
+        _testOutputHelper.WriteLine($"Errors: {result.Value.Errors}");
     }
 
     [Fact]
@@ -117,8 +120,8 @@ public class IngestionServiceUnitTests : IDisposable
         // Assert
         Assert.True(result.IsSuccess);
         Assert.NotNull(result.Value);
-        Console.WriteLine($"Files Processed: {result.Value.FilesProcessed}");
-        Console.WriteLine($"Errors: {result.Value.Errors}");
+        _testOutputHelper.WriteLine($"Files Processed: {result.Value.FilesProcessed}");
+        _testOutputHelper.WriteLine($"Errors: {result.Value.Errors}");
     }
 
     [Fact]

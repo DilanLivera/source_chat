@@ -7,18 +7,21 @@ using SourceChat.Infrastructure.AI;
 using SourceChat.Infrastructure.Configuration;
 using SourceChat.Infrastructure.FileSystem;
 using SourceChat.Infrastructure.Storage;
+using Xunit.Abstractions;
 using IngestionResult = SourceChat.Features.Shared.IngestionResult;
 
 namespace SourceChat.Tests.Functional;
 
 public class IngestionAndQueryFunctionalTests : IDisposable
 {
+    private readonly ITestOutputHelper _testOutputHelper;
     private readonly string _testDirectory;
     private readonly string _testDbPath;
     private readonly Dictionary<string, string?> _originalEnvVars;
 
-    public IngestionAndQueryFunctionalTests()
+    public IngestionAndQueryFunctionalTests(ITestOutputHelper testOutputHelper)
     {
+        _testOutputHelper = testOutputHelper;
         _testDirectory = Path.Combine(Path.GetTempPath(), $"SourceChatFunctionalTest_{Guid.NewGuid()}");
         Directory.CreateDirectory(_testDirectory);
 
@@ -121,8 +124,8 @@ public class IngestionAndQueryFunctionalTests : IDisposable
             queryResponse.Value.Contains("SourceChat", StringComparison.OrdinalIgnoreCase),
             $"Query result should contain relevant information. Result: {queryResponse.Value}");
 
-        Console.WriteLine($"Ingestion - Files Processed: {ingestionResult.Value.FilesProcessed}, Errors: {ingestionResult.Value.Errors}");
-        Console.WriteLine($"Query Result: {queryResponse.Value}");
+        _testOutputHelper.WriteLine($"Ingestion - Files Processed: {ingestionResult.Value.FilesProcessed}, Errors: {ingestionResult.Value.Errors}");
+        _testOutputHelper.WriteLine($"Query Result: {queryResponse.Value}");
     }
 
     [Fact]
@@ -146,7 +149,7 @@ public class IngestionAndQueryFunctionalTests : IDisposable
         Assert.True(queryResponse.IsFailure);
         Assert.Equal(QueryErrors.CollectionNotFound().Message, queryResponse.Error.Message);
 
-        Console.WriteLine("Query correctly returned failure when no data was ingested");
+        _testOutputHelper.WriteLine("Query correctly returned failure when no data was ingested");
     }
 
     public void Dispose()
