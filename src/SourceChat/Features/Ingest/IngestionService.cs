@@ -48,18 +48,11 @@ internal sealed class IngestionService
         _chatClient = chatClientFactory.Create();
     }
 
-    public async Task<Result<IngestionResult>> IngestDirectoryAsync(string path,
+    public async Task<Result<IngestionResult>> IngestDirectoryAsync(DirectoryInfo directory,
                                                                     string patterns,
                                                                     ChunkingStrategy strategy,
                                                                     bool incremental)
     {
-        if (!Directory.Exists(path))
-        {
-            _logger.LogError("Directory does not exist: {Path}", path);
-
-            return Result<IngestionResult>.Failure(IngestionErrors.DirectoryNotFound(path));
-        }
-
         string tokenizerModel = _config.AiProvider.ToLowerInvariant() switch
         {
             "openai" => _config.OpenAiChatModel,
@@ -111,17 +104,16 @@ internal sealed class IngestionService
         pipeline.DocumentProcessors.Add(imageAlternativeTextEnricher);
         pipeline.ChunkProcessors.Add(summaryEnricher);
 
-        DirectoryInfo directory = new(path);
         int filesProcessed = 0;
 
-        _logger.LogInformation("Starting to process files from directory: {Path} with patterns: {Patterns}", path, patterns);
+        _logger.LogInformation("Starting to process files from directory: {Path} with patterns: {Patterns}", directory.FullName, patterns);
 
         string[] patternArray = patterns.Split(';', options: StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         List<string> matchingFiles = [];
 
         foreach (string pattern in patternArray)
         {
-            string[] files = Directory.GetFiles(path, pattern, SearchOption.AllDirectories);
+            string[] files = Directory.GetFiles(directory.FullName, pattern, SearchOption.AllDirectories);
             matchingFiles.AddRange(files);
         }
 
@@ -187,7 +179,7 @@ internal sealed class IngestionService
                 // Ensure we have a full path (DocumentId might be relative)
                 if (!Path.IsPathRooted(filePath))
                 {
-                    filePath = Path.Combine(path, filePath);
+                    filePath = Path.Combine(directory.FullName, filePath);
                 }
                 filePath = Path.GetFullPath(filePath);
 

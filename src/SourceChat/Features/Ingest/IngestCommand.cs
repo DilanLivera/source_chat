@@ -66,6 +66,8 @@ internal static class IngestCommand
                 return;
             }
 
+            DirectoryInfo directory = new(path);
+
             Console.WriteLine($"Ingesting files from: {path}");
             Console.WriteLine($"Strategy: {strategy}");
             Console.WriteLine($"Patterns: {patterns}");
@@ -73,7 +75,7 @@ internal static class IngestCommand
             Console.WriteLine();
 
             IngestionService ingestionService = serviceProvider.GetRequiredService<IngestionService>();
-            Result<IngestionResult> ingestionResult = await ingestionService.IngestDirectoryAsync(path,
+            Result<IngestionResult> ingestionResult = await ingestionService.IngestDirectoryAsync(directory,
                                                                                                   patterns,
                                                                                                   strategy,
                                                                                                   incremental);

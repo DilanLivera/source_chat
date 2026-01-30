@@ -94,7 +94,7 @@ public class IngestionAndQueryFunctionalTests : IDisposable
 
         // Act - Ingestion
         Result<IngestionResult> ingestionResult = await ingestionService.IngestDirectoryAsync(
-            _testDirectory,
+            new DirectoryInfo(_testDirectory),
             "*.md",
             ChunkingStrategy.Section,
             incremental: false);

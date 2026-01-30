@@ -68,7 +68,7 @@ public class IngestionServiceUnitTests : IDisposable
 
         // Act: This is where you can set a breakpoint!
         Result<IngestionResult> result = await ingestionService.IngestDirectoryAsync(
-            _testDirectory,
+            new DirectoryInfo(_testDirectory),
             "*.md;*.cs",
             ChunkingStrategy.Section,
             incremental: false);
@@ -112,7 +112,7 @@ public class IngestionServiceUnitTests : IDisposable
 
         // Act: Only process .md files - set breakpoint here to debug!
         Result<IngestionResult> result = await ingestionService.IngestDirectoryAsync(
-            _testDirectory,
+            new DirectoryInfo(_testDirectory),
             "*.md",  // Only markdown files
             ChunkingStrategy.Section,
             incremental: false);
@@ -144,7 +144,7 @@ public class IngestionServiceUnitTests : IDisposable
 
         // Act: Set breakpoint here!
         Result<IngestionResult> result = await ingestionService.IngestDirectoryAsync(
-            _testDirectory,
+            new DirectoryInfo(_testDirectory),
             "*.md",
             ChunkingStrategy.Section,
             incremental: false);
